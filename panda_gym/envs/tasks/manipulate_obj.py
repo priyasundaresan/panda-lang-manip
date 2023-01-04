@@ -1,4 +1,5 @@
 from typing import Any, Dict
+import time
 
 import numpy as np
 
@@ -6,20 +7,23 @@ from panda_gym.envs.core import Task
 from panda_gym.pybullet import PyBullet
 from panda_gym.utils import distance
 
+# NEW
+from panda_gym.pybullet import PyBullet
+#from panda_gym.envs.robots.panda import Panda
+from panda_gym.envs.robots.panda_ori import Panda
 
-class PickAndPlace(Task):
+from scipy.spatial.transform import Slerp
+from scipy.spatial.transform import Rotation as R
+
+class Manipulate(Task):
     def __init__(
         self,
         sim: PyBullet,
-        reward_type: str = "sparse",
-        distance_threshold: float = 0.05,
         goal_xy_range: float = 0.3,
         goal_z_range: float = 0.2,
         obj_xy_range: float = 0.3,
     ) -> None:
         super().__init__(sim)
-        self.reward_type = reward_type
-        self.distance_threshold = distance_threshold
         self.object_size = 0.04
         self.goal_range_low = np.array([-goal_xy_range / 2, -goal_xy_range / 2, 0])
         self.goal_range_high = np.array([goal_xy_range / 2, goal_xy_range / 2, goal_z_range])
@@ -67,12 +71,13 @@ class PickAndPlace(Task):
         object_position = self._sample_object()
         self.sim.set_base_pose("target", self.goal, np.array([0.0, 0.0, 0.0, 1.0]))
         self.sim.set_base_pose("object", object_position, np.array([0.0, 0.0, 0.0, 1.0]))
+        return object_position
 
     def _sample_goal(self) -> np.ndarray:
         """Sample a goal."""
         goal = np.array([0.0, 0.0, self.object_size / 2])  # z offset for the cube center
-        noise = self.np_random.uniform(self.goal_range_low, self.goal_range_high)
-        if self.np_random.random() < 0.3:
+        noise = np.random.uniform(self.goal_range_low, self.goal_range_high)
+        if np.random.random() < 0.3:
             noise[2] = 0.0
         goal += noise
         return goal
@@ -80,17 +85,62 @@ class PickAndPlace(Task):
     def _sample_object(self) -> np.ndarray:
         """Randomize start position of object."""
         object_position = np.array([0.0, 0.0, self.object_size / 2])
-        noise = self.np_random.uniform(self.obj_range_low, self.obj_range_high)
+        noise = np.random.uniform(self.obj_range_low, self.obj_range_high)
         object_position += noise
         return object_position
 
     def is_success(self, achieved_goal: np.ndarray, desired_goal: np.ndarray) -> np.ndarray:
-        d = distance(achieved_goal, desired_goal)
-        return np.array(d < self.distance_threshold, dtype=np.bool8)
+        return True
 
     def compute_reward(self, achieved_goal, desired_goal, info: Dict[str, Any]) -> np.ndarray:
-        d = distance(achieved_goal, desired_goal)
-        if self.reward_type == "sparse":
-            return -np.array(d > self.distance_threshold, dtype=np.float32)
-        else:
-            return -d.astype(np.float32)
+        return 0
+
+if __name__ == '__main__':
+    sim = PyBullet(render=True)
+    robot = Panda(sim, block_gripper=False, base_position=np.array([-0.6, 0.0, 0.0]), control_type="ee")
+    task = Manipulate(sim)
+    robot.reset()
+    thresh = 5e-3
+
+    pos = task.reset()
+    euler_xyz = np.array([-180,0,0]) # standard
+
+    # Move to object
+    da = pos - robot.get_ee_position()
+    while np.linalg.norm(da) > thresh:
+        da = pos - robot.get_ee_position()
+        action = da.tolist() + [0.5]
+        robot.set_action(action, euler_xyz)
+        robot.sim.step()
+
+    # Grasp
+    robot.block_gripper = True
+    for i in range(100):
+        robot.set_action(action, euler_xyz)
+        robot.sim.step()
+
+    
+    # Lift and rotate
+    pos = pos.copy()
+    pos[2] += 0.05
+    initial_euler_xyz = euler_xyz.copy()
+    euler_xyz = np.array([-180,0,45])
+
+    T = 200
+    slerp =  Slerp([0,T], R.from_euler('xyz', [initial_euler_xyz, euler_xyz], degrees=True))
+    da = pos - robot.get_ee_position()
+    ctr = 0
+
+    for i in range(T):
+        da = pos - robot.get_ee_position()
+        action = da.tolist() + [0.0]
+        euler_xyz = slerp(i).as_euler('xyz', degrees=True)
+        robot.set_action(action, euler_xyz)
+        robot.sim.step()
+
+    # Drop object
+    robot.block_gripper = False
+    for i in range(100):
+        robot.set_action(action, euler_xyz)
+        robot.sim.step()
+    time.sleep(2)

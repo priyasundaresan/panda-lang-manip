@@ -1,4 +1,3 @@
-import warnings
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Tuple
 
@@ -8,7 +7,6 @@ from gymnasium import spaces
 from gymnasium.utils import seeding
 
 from panda_gym.pybullet import PyBullet
-
 
 class PyBulletRobot(ABC):
     """Base class for robot env.
@@ -208,7 +206,6 @@ class RobotTaskEnv(gym.Env):
     def __init__(self, robot: PyBulletRobot, task: Task) -> None:
         assert robot.sim == task.sim, "The robot and the task must belong to the same simulation."
         self.sim = robot.sim
-        self.metadata["render_fps"] = 1 / self.sim.dt
         self.robot = robot
         self.task = task
         observation, _ = self.reset()  # required for init; seed can be changed later
@@ -293,6 +290,7 @@ class RobotTaskEnv(gym.Env):
 
     def render(
         self,
+        mode: str = "human",
         width: int = 720,
         height: int = 480,
         target_position: Optional[np.ndarray] = None,
@@ -300,13 +298,15 @@ class RobotTaskEnv(gym.Env):
         yaw: float = 45,
         pitch: float = -30,
         roll: float = 0,
-        mode: Optional[str] = None,
     ) -> Optional[np.ndarray]:
         """Render.
 
-        If render mode is "rgb_array", return an RGB array of the scene. Else, do nothing.
+        If mode is "human", make the rendering real-time. All other arguments are
+        unused. If mode is "rgb_array", return an RGB array of the scene.
 
         Args:
+            mode (str): "human" of "rgb_array". If "human", this method waits for the time necessary to have
+                a realistic temporal rendering and all other args are ignored. Else, return an RGB array.
             width (int, optional): Image width. Defaults to 720.
             height (int, optional): Image height. Defaults to 480.
             target_position (np.ndarray, optional): Camera targetting this postion, as (x, y, z).
@@ -315,20 +315,13 @@ class RobotTaskEnv(gym.Env):
             yaw (float, optional): Yaw of the camera. Defaults to 45.
             pitch (float, optional): Pitch of the camera. Defaults to -30.
             roll (int, optional): Rool of the camera. Defaults to 0.
-            mode (str, optional): Deprecated: This argument is deprecated and will be removed in a future
-                version. Use the render_mode argument of the constructor instead.
 
         Returns:
             RGB np.ndarray or None: An RGB array if mode is 'rgb_array', else None.
         """
-        if mode is not None:
-            warnings.warn(
-                "The 'mode' argument is deprecated and will be removed in "
-                "a future version. Use the 'render_mode' argument of the constructor instead.",
-                DeprecationWarning,
-            )
         target_position = target_position if target_position is not None else np.zeros(3)
         return self.sim.render(
+            mode,
             width=width,
             height=height,
             target_position=target_position,
