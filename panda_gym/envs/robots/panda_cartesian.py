@@ -70,13 +70,14 @@ class Panda(PyBulletRobot):
         target_angles = np.concatenate((target_arm_angles, [target_fingers_width / 2, target_fingers_width / 2]))
         self.control_joints(target_angles=target_angles)
 
-    def get_waypoint(self, start_pt, target_pt, max_delta):
+    def get_waypoint(self, start_pt, target_pt, max_delta, num_steps=None):
         total_delta = (target_pt - start_pt)
-        num_steps = (np.linalg.norm(total_delta) // max_delta)
-        remainder = (np.linalg.norm(total_delta) % max_delta)
-        #if remainder > 1e-3:
-        if remainder > 1e-4:
-            num_steps += 1
+        if num_steps is None:
+            num_steps = (np.linalg.norm(total_delta) // max_delta)
+            remainder = (np.linalg.norm(total_delta) % max_delta)
+            if remainder > 1e-3:
+                num_steps += 1
+
         delta = total_delta / num_steps
         def gen_waypoint(i):
             return start_pt + delta * min(i, num_steps)
@@ -96,32 +97,38 @@ class Panda(PyBulletRobot):
     def move(self, goal_pos, goal_euler):
         start_pos = self.get_ee_position()
         start_euler = self.get_ee_orientation()
-
-        #gen_fn, num_steps = self.get_waypoint(start_pos, goal_pos, 0.05)
-        gen_fn, num_steps = self.get_waypoint(start_pos, goal_pos, 0.001)
-        gen_ori_fn = self.get_ori(start_euler, goal_euler, num_steps)
-
         finger_width = self.get_fingers_width()
+
+        distance = np.linalg.norm(goal_pos - start_pos)
+        if distance < 0.03:
+            gen_ori_fn = self.get_ori(start_euler, goal_euler, 20)
+            gen_fn, num_steps = self.get_waypoint(start_pos, goal_pos, 0.015, num_steps=20)
+
+        else:
+            #gen_fn, num_steps = self.get_waypoint(start_pos, goal_pos, 0.01)
+            gen_fn, num_steps = self.get_waypoint(start_pos, goal_pos, 0.015)
+            gen_ori_fn = self.get_ori(start_euler, goal_euler, num_steps)
 
         for i in range(1, num_steps+1):
             next_pos = gen_fn(i)
             next_euler = gen_ori_fn(i)
-            #print(next_pos, next_euler)
-            action = next_pos - self.get_ee_position()
+            action = (next_pos - self.get_ee_position())
             action = action.tolist() + [finger_width]
             self.set_action(action, next_euler)
             self.sim.step()
 
     def grasp(self):
         self.block_gripper = True
-        for i in range(100):
+        #for i in range(100):
+        for i in range(10):
             action = [0,0,0,1]
             self.set_action(action, self.get_ee_orientation())
             self.sim.step()
 
     def release(self):
         self.block_gripper = False
-        for i in range(100):
+        #for i in range(100):
+        for i in range(10):
             action = [0,0,0,1]
             self.set_action(action, self.get_ee_orientation())
             self.sim.step()
@@ -135,7 +142,9 @@ class Panda(PyBulletRobot):
         Returns:
             np.ndarray: Target arm angles, as the angles of the 7 arm joints.
         """
-        ee_displacement = ee_displacement[:3] * 0.05  # limit maximum change in position
+        #ee_displacement = ee_displacement[:3] * 0.05  # limit maximum change in position
+        ee_displacement = ee_displacement[:3] * 1  # limit maximum change in position
+
         # get the current position and the target position
         ee_position = self.get_ee_position()
         target_ee_position = ee_position + ee_displacement
