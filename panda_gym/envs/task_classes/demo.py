@@ -16,7 +16,7 @@ from scipy.spatial.transform import Rotation as R
 
 from pynput import keyboard
 
-class Manipulate(Task):
+class Teleop:
     def __init__(
         self,
         sim: PyBullet,
@@ -24,7 +24,7 @@ class Manipulate(Task):
         goal_z_range: float = 0.2,
         obj_xy_range: float = 0.3,
     ) -> None:
-        super().__init__(sim)
+        self.sim = sim
         self.object_size = 0.04
         self.goal_range_low = np.array([-goal_xy_range / 2, -goal_xy_range / 2, 0])
         self.goal_range_high = np.array([goal_xy_range / 2, goal_xy_range / 2, goal_z_range])
@@ -90,64 +90,74 @@ class Manipulate(Task):
         object_position += noise
         return object_position
 
-    def is_success(self, achieved_goal: np.ndarray, desired_goal: np.ndarray) -> np.ndarray:
-        return True
+    def teleop(self, robot):
+        task.reset()
+        grasped = False
+        last = ''
+        vel = 1
+        offset = 0.02
+        while True:
+            curr_pos = robot.get_ee_position()
+            curr_euler = robot.get_ee_orientation()
+            with keyboard.Events() as events:
+                event = events.get(10.0)
+                if event is None:
+                    robot.sim.step()
+                else:
+                    if 'char' in dir(event.key):
+                        if event.key.char == last:
+                            vel *= 1.03
+                        else:
+                            vel = 1
+                            offset = 0.02
 
-    def compute_reward(self, achieved_goal, desired_goal, info: Dict[str, Any]) -> np.ndarray:
-        return 0
+                        offset *= vel
+                        if event.key.char == 'j':
+                            robot.move(curr_pos - np.array([0,0,offset]), curr_euler)
+                        elif event.key.char == 'k':
+                            robot.move(curr_pos + np.array([0,0,offset]), curr_euler)
+                        elif event.key.char == 'o':
+                            robot.move(curr_pos + np.array([offset,0,0]), curr_euler)
+                        elif event.key.char == 'i':
+                            robot.move(curr_pos + np.array([-offset,0,0]), curr_euler)
+                        elif event.key.char == 'l':
+                            robot.move(curr_pos + np.array([0,offset,0]), curr_euler)
+                        elif event.key.char == 'h':
+                            robot.move(curr_pos + np.array([0,-offset,0]), curr_euler)
+                        elif 'q' in str(event.key):
+                            break
+                        elif 'r' in str(event.key):
+                            curr_euler = np.array([-180,0,0])
+                            robot.move(curr_pos, curr_euler)
+                        last = event.key.char
+                    elif event.key == keyboard.Key.space:
+                        if not grasped:
+                            robot.grasp()
+                            grasped = True
+                        else:
+                            robot.release()
+                            grasped = False
+                    elif event.key == keyboard.Key.esc:
+                        break
+                    elif event.key == keyboard.Key.right:
+                        offset = np.array([0,0,10])
+                        robot.move(curr_pos, curr_euler + offset)
+                    elif event.key == keyboard.Key.left:
+                        offset = np.array([0,0,-10])
+                        robot.move(curr_pos, curr_euler + offset)
+                    elif event.key == keyboard.Key.up:
+                        offset = np.array([0,10,0])
+                        robot.move(curr_pos, curr_euler + offset)
+                    elif event.key == keyboard.Key.down:
+                        offset = np.array([0,-10,0])
+                        robot.move(curr_pos, curr_euler + offset)
+
 
 if __name__ == '__main__':
     sim = PyBullet(render=True)
     robot = Panda(sim, block_gripper=False, base_position=np.array([-0.6, 0.0, 0.0]), control_type="ee")
-    task = Manipulate(sim)
     robot.reset()
-    thresh = 5e-3
-
-    pos = task.reset()
-    #goal_euler_xyz = np.array([180,0,0]) # standard
-
     robot.release()
-    #robot.move(pos + np.array([0,0,0.05]), goal_euler_xyz)
+    task = Teleop(sim)
+    task.teleop(robot)
 
-    grasped = False
-    while True:
-        curr_pos = robot.get_ee_position()
-        curr_euler = robot.get_ee_orientation()
-        with keyboard.Events() as events:
-            event = events.get(1.0)
-            if event is None:
-                robot.sim.step()
-            else:
-                #print('Received event {}'.format(event))
-                #if 'j' in str(event.key):
-                if 'char' in dir(event.key):
-                    if event.key.char == 'j':
-                        robot.move(curr_pos - np.array([0,0,0.02]), curr_euler)
-                    elif event.key.char == 'k':
-                        robot.move(curr_pos + np.array([0,0,0.02]), curr_euler)
-                    elif event.key.char == 'm':
-                        robot.move(curr_pos + np.array([0.02,0,0]), curr_euler)
-                    elif event.key.char == 'i':
-                        robot.move(curr_pos + np.array([-0.02,0,0]), curr_euler)
-                    elif event.key.char == 'l':
-                        robot.move(curr_pos + np.array([0,0.02,0]), curr_euler)
-                    elif event.key.char == 'h':
-                        robot.move(curr_pos + np.array([0,-0.02,0]), curr_euler)
-                    elif 'q' in str(event.key):
-                        break
-                elif event.key == keyboard.Key.space:
-                    if not grasped:
-                        robot.grasp()
-                        grasped = True
-                    else:
-                        robot.release()
-                        grasped = False
-                elif event.key == keyboard.Key.esc:
-                    break
-    #robot.grasp()
-    #robot.move(pos + np.array([0,0,0.15]), goal_euler_xyz)
-
-    #for i in range(100):
-    #    robot.sim.step()
-
-    #robot.release()
