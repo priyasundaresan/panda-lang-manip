@@ -113,11 +113,9 @@ if __name__ == '__main__':
         euler_xyz = slerp(i).as_euler('xyz', degrees=True)
         robot.set_action(action, euler_xyz)
         robot.sim.step()
-        img = robot.sim.render(mode='rgb_array')
-        #img = np.array(img).reshape((480, 720, 4)).astype(np.uint8)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-        cv2.imwrite('images/%05d.jpg'%ctr, img)
+        #img = robot.sim.render(mode='rgb_array')
+        #img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        #cv2.imwrite('images/%05d.jpg'%ctr, img)
         i += 1
         ctr += 1
 
@@ -128,9 +126,9 @@ if __name__ == '__main__':
         action = (da*2).tolist() + [1.0]
         robot.set_action(action, euler_xyz)
         robot.sim.step()
-        img = robot.sim.render(mode='rgb_array')
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        cv2.imwrite('images/%05d.jpg'%ctr, img)
+        #img = robot.sim.render(mode='rgb_array')
+        #img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        #cv2.imwrite('images/%05d.jpg'%ctr, img)
         ctr += 1
 
     # Grasp
@@ -138,9 +136,9 @@ if __name__ == '__main__':
     for i in range(5):
         robot.set_action(action, euler_xyz)
         robot.sim.step()
-        img = robot.sim.render(mode='rgb_array')
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        cv2.imwrite('images/%05d.jpg'%ctr, img)
+        #img = robot.sim.render(mode='rgb_array')
+        #img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        #cv2.imwrite('images/%05d.jpg'%ctr, img)
         ctr += 1
 
     ## Lift and rotate
@@ -163,17 +161,17 @@ if __name__ == '__main__':
         euler_xyz = slerp(i).as_euler('xyz', degrees=True)
         robot.set_action(action, euler_xyz)
         robot.sim.step()
-        img = robot.sim.render(mode='rgb_array')
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        cv2.imwrite('images/%05d.jpg'%ctr, img)
+        #img = robot.sim.render(mode='rgb_array')
+        #img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        #cv2.imwrite('images/%05d.jpg'%ctr, img)
         i += 1
         ctr += 1
 
     for i in range(100):
         robot.sim.step()
-        img = robot.sim.render(mode='rgb_array')
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        cv2.imwrite('images/%05d.jpg'%ctr, img)
+        #img = robot.sim.render(mode='rgb_array')
+        #img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        #cv2.imwrite('images/%05d.jpg'%ctr, img)
         ctr += 1
     print('here')
     time.sleep(1)

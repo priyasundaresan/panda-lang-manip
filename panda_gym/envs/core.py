@@ -86,6 +86,9 @@ class PyBulletRobot(ABC):
         """
         return self.sim.get_link_position(self.body_name, link)
 
+    def get_link_orientation(self, link: int) -> np.ndarray:
+        return self.sim.get_link_orientation(self.body_name, link)
+
     def get_link_velocity(self, link: int) -> np.ndarray:
         """Returns the velocity of a link as (vx, vy, vz)
 
