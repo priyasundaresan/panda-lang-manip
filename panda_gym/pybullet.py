@@ -117,7 +117,7 @@ class PyBullet:
         if mode == "human":
             self.physics_client.configureDebugVisualizer(self.physics_client.COV_ENABLE_SINGLE_STEP_RENDERING)
             time.sleep(self.dt)  # wait to seems like real speed
-        if mode == "rgb_array":
+        if mode == "rgb_array" or mode == "depth":
             if self.connection_mode == p.DIRECT:
                 warnings.warn(
                     "The use of the render method is not recommended when the environment "
@@ -146,7 +146,38 @@ class PyBullet:
             )
 
             #return px
-            return np.array(px).reshape((height, width, 4)).astype(np.uint8)
+            depth = np.array(depth).reshape(height, width)
+            rgb = np.array(px).reshape((height, width, 4)).astype(np.uint8)
+
+            if mode == 'depth':
+                projectionMatrix = np.asarray(proj_matrix).reshape([4,4],order='F')
+                viewMatrix = np.asarray(view_matrix).reshape([4,4],order='F')
+                tran_pix_world = np.linalg.inv(np.matmul(projectionMatrix, viewMatrix))
+
+                y, x = np.mgrid[-1:1:2 / height, -1:1:2 / width]
+                y *= -1.
+                x, y, z = x.reshape(-1), y.reshape(-1), depth.reshape(-1)
+                h = np.ones_like(z)
+
+                pixels = np.stack([x, y, z, h], axis=1)
+
+                colors = rgb[:,:,:3].reshape(height*width, 3)
+
+                # filter out "infinite" depths
+                idxs = z < 0.99
+                #pixels = pixels[z < 0.99]
+                pixels = pixels[idxs]
+                colors = colors[idxs]
+                pixels[:, 2] = 2 * pixels[:, 2] - 1
+
+                # turn pixels to world coordinates
+                points = np.matmul(tran_pix_world, pixels.T).T
+                points /= points[:, 3: 4]
+                points = points[:, :3]
+            
+                return depth, points, colors
+
+            return rgb
 
     def get_base_position(self, body: str) -> np.ndarray:
         """Get the position of the body.
