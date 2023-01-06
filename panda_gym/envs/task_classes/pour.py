@@ -76,7 +76,7 @@ class Pour:
 
     def reset_sim(self):
         cup1_loc = np.random.uniform([-0.2,-0.3,0.075], [0.0,-0.2,0.075])
-        cup2_loc  = np.random.uniform([-0.2,-0.1,0.075], [0.0, 0.1,0.075])
+        cup2_loc  = np.random.uniform([-0.1,-0.1,0.075], [0.0, 0.1,0.075])
 
         #cup1_loc = [0,-0.2,0.075]
         #cup2_loc = [0,-0.1,0.075]
@@ -97,6 +97,7 @@ class Pour:
 
         # Grasp cup
         self.robot.move(pos + np.array([0,0,0.15]), goal_euler_xyz)
+        #self.robot.move(pos - np.array([0,0,0.018]), goal_euler_xyz)
         #self.robot.move(pos - np.array([0,0,0.0175]), goal_euler_xyz)
         self.robot.move(pos - np.array([0,0,0.02]), goal_euler_xyz)
         self.robot.grasp()
@@ -106,8 +107,8 @@ class Pour:
 
         # Pour into other cup
         self.robot.move(final_pos + np.array([0,-0.05,0.15]), goal_euler_xyz)
-        #goal_euler_xyz = np.array([180,80,90])
         goal_euler_xyz = np.array([180,85,90])
+        #goal_euler_xyz = np.array([180,95,90])
         self.robot.move(final_pos + np.array([0,-0.05,0.15]), goal_euler_xyz)
         
         for i in range(50):

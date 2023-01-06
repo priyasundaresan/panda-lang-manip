@@ -9,7 +9,6 @@ from panda_gym.utils import distance
 
 # NEW
 from panda_gym.pybullet import PyBullet
-#from panda_gym.envs.robots.panda import Panda
 from panda_gym.envs.robots.panda_cartesian import Panda
 
 from scipy.spatial.transform import Slerp

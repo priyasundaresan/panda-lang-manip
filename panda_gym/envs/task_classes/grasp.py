@@ -126,7 +126,6 @@ if __name__ == '__main__':
     #img = robot.sim.render(mode='depth')
     img, points, colors = robot.sim.render(mode='depth', distance=0.6, target_position=[0,0,0.1], yaw=90)
     pcd = o3d.geometry.PointCloud()
-    #points = pointcloud[:,:,:3].reshape(-1,3)
     pcd.points = o3d.utility.Vector3dVector(points)
     pcd.colors = o3d.utility.Vector3dVector(colors/255.)
     o3d.visualization.draw_geometries([pcd])
