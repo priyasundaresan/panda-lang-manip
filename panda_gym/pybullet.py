@@ -82,10 +82,11 @@ class PyBullet:
         """
         self.physics_client.removeState(state_id)
 
+    # 720 480
     def render(
         self,
         mode: str = "human",
-        width: int = 720,
+        width: int = 480,
         height: int = 480,
         target_position: Optional[np.ndarray] = None,
         distance: float = 1.4,
@@ -134,9 +135,12 @@ class PyBullet:
                 roll=roll,
                 upAxisIndex=2,
             )
+
             proj_matrix = self.physics_client.computeProjectionMatrixFOV(
                 fov=60, aspect=float(width) / height, nearVal=0.1, farVal=100.0
             )
+
+
             (_, _, px, depth, _) = self.physics_client.getCameraImage(
                 width=width,
                 height=height,
@@ -145,6 +149,10 @@ class PyBullet:
                 renderer=p.ER_BULLET_HARDWARE_OPENGL,
             )
 
+            pmat = np.array(proj_matrix).reshape((4,4), order='C')
+            vmat = np.array(view_matrix).reshape((4,4), order='C')
+            fmat = pmat @ vmat.T
+            
             #return px
             depth = np.array(depth).reshape(height, width)
             rgb = np.array(px).reshape((height, width, 4)).astype(np.uint8)
@@ -174,10 +182,16 @@ class PyBullet:
                 points = np.matmul(tran_pix_world, pixels.T).T
                 points /= points[:, 3: 4]
                 points = points[:, :3]
+
+                z_valid = np.where(points[:,2] > -0.1)
+                points = points[z_valid]
+                colors = colors[z_valid]
+                
             
                 return depth, points, colors
 
-            return rgb
+            else:
+                return rgb, fmat
 
     def get_base_position(self, body: str) -> np.ndarray:
         """Get the position of the body.

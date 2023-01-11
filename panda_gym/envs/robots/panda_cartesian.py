@@ -63,7 +63,8 @@ class Panda(PyBulletRobot):
         if self.block_gripper:
             target_fingers_width = 0
         else:
-            fingers_ctrl = action[-1] * 0.2  # limit maximum change in position
+            #fingers_ctrl = action[-1] * 0.2  # limit maximum change in position
+            fingers_ctrl = action[-1]
             fingers_width = self.get_fingers_width()
             target_fingers_width = fingers_width + fingers_ctrl
 
@@ -98,6 +99,8 @@ class Panda(PyBulletRobot):
         start_pos = self.get_ee_position()
         start_euler = self.get_ee_orientation()
         finger_width = self.get_fingers_width()
+        #if finger_width < 0.1:
+        #    finger_width = 0
 
         distance = np.linalg.norm(goal_pos - start_pos)
         if distance < 0.03:
@@ -120,7 +123,7 @@ class Panda(PyBulletRobot):
     def grasp(self):
         self.block_gripper = True
         #for i in range(100):
-        for i in range(10):
+        for i in range(30):
             action = [0,0,0,1]
             self.set_action(action, self.get_ee_orientation())
             self.sim.step()
@@ -128,7 +131,7 @@ class Panda(PyBulletRobot):
     def release(self):
         self.block_gripper = False
         #for i in range(100):
-        for i in range(10):
+        for i in range(30):
             action = [0,0,0,1]
             self.set_action(action, self.get_ee_orientation())
             self.sim.step()
