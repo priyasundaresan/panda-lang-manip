@@ -2,6 +2,7 @@ from typing import Any, Dict
 import time
 
 import numpy as np
+import cv2
 
 from panda_gym.envs.core import Task
 from panda_gym.pybullet import PyBullet
@@ -24,6 +25,7 @@ class Teleop:
         goal_z_range: float = 0.2,
         obj_xy_range: float = 0.3,
     ) -> None:
+        #sim.timestep = 1./240.
         self.sim = sim
         self.object_size = 0.04
         self.goal_range_low = np.array([-goal_xy_range / 2, -goal_xy_range / 2, 0])
@@ -71,7 +73,8 @@ class Teleop:
         self.goal = self._sample_goal()
         object_position = self._sample_object()
         self.sim.set_base_pose("target", self.goal, np.array([0.0, 0.0, 0.0, 1.0]))
-        self.sim.set_base_pose("object", object_position, np.array([0.0, 0.0, 0.0, 1.0]))
+        #self.sim.set_base_pose("object", object_position, np.array([0.0, 0.0, 0.0, 1.0]))
+        self.sim.set_base_pose("object", object_position, np.array([0.0, 0.0, np.random.uniform(0,90), 1.0]))
         return object_position, self.goal
 
     def _sample_goal(self) -> np.ndarray:
@@ -90,12 +93,30 @@ class Teleop:
         object_position += noise
         return object_position
 
+    
+    
+    def record(self, robot):
+        #img = robot.sim.render(mode='rgb_array', distance=0.6, target_position=[0,0,0.1], yaw=90)
+        img, fmat = robot.sim.render(mode='rgb_array')
+        H,W,C = img.shape
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        position = robot.get_ee_position()
+        print(position)
+        pixel = (fmat @ np.hstack((position, [1])))[:3]*np.array([240, 240, 0]) + np.array([120, 120, 0])
+        pixel = pixel[:-1].astype(int)
+        pixel[1] = 240 - pixel[1]
+        print(pixel)
+        cv2.circle(img, tuple(pixel), 4, (255,255,0), -1)
+        cv2.imshow('img', img)
+        cv2.waitKey(0)
+
     def teleop(self, robot):
         pos, goal = task.reset()
         grasped = False
         last = ''
         vel = 1
-        offset = 0.02
+        offset = 0.015
         curr_euler = robot.get_ee_orientation()
         reset_pos = robot.get_ee_position()
 
@@ -116,7 +137,7 @@ class Teleop:
                                 vel = 1.
                         else:
                             vel = 1.
-                            offset = 0.02
+                            offset = 0.015
 
                         new_offset = offset * vel
                         offset = new_offset
@@ -172,9 +193,11 @@ class Teleop:
                         robot.move(curr_pos, curr_euler + offset)
 
         #robot.move(goal, curr_euler)
-        #for _ in range(50):
-        #    robot.sim.step()
 
+        for _ in range(100):
+            robot.sim.step()
+
+        self.record(robot)
 
 if __name__ == '__main__':
     sim = PyBullet(render=True)

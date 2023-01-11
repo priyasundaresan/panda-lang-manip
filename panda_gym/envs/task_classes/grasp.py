@@ -71,7 +71,8 @@ class Manipulate(Task):
     def reset(self) -> None:
         self.goal = self._sample_goal()
         object_position = self._sample_object()
-        self.sim.set_base_pose("target", self.goal, np.array([0.0, 0.0, 0.0, 1.0]))
+        #self.sim.set_base_pose("target", self.goal, np.array([0.0, 0.0, 0.0, 1.0]))
+        self.sim.set_base_pose("target", self.goal, object_position)
         self.sim.set_base_pose("object", object_position, np.array([0.0, 0.0, 0.0, 1.0]))
         return object_position
 
@@ -97,7 +98,66 @@ class Manipulate(Task):
     def compute_reward(self, achieved_goal, desired_goal, info: Dict[str, Any]) -> np.ndarray:
         return 0
 
+    def record(self, robot):
+        img, fmat = robot.sim.render(mode='rgb_array')
+        H,W,C = img.shape
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        position = robot.get_ee_position()
+        print('POS', position)
+        pixel = (fmat @ np.hstack((position, [1])))
+        print(pixel)
+        
+        x,y,z,w = pixel
+        #x /= w
+        #y /= w
+        print(x,y)
+        x += 1
+        y += 1
+        print(x,y)
+        x /= 2
+        y /= 2
+        print(x,y)
+        #print(x,y)
+
+        x *= 480
+        y *= 480
+        y = 480 - y
+    
+        pixel = (int(x), int(y))
+
+        #pixel = (fmat @ np.hstack((position, [1])))[:3]*np.array([480, 480, 0]) + np.array([240, 240, 0])
+        #pixel = pixel[:-1].astype(int)
+        #pixel[1] = 480 - pixel[1]
+        #print(pixel)
+
+        cv2.circle(img, tuple(pixel), 4, (255,255,0), -1)
+        cv2.imshow('img', img)
+        cv2.waitKey(0)
+
+def visualize(img, points, colors):
+    pcd = o3d.geometry.PointCloud()
+
+    rot = R.from_euler('yz', [90,90], degrees=True).as_matrix()
+    rot = R.from_euler('y', 180, degrees=True).as_matrix()@rot
+    points = (rot@points.T).T
+
+    pcd.points = o3d.utility.Vector3dVector(points)
+    pcd.colors = o3d.utility.Vector3dVector(colors/255.)
+    o3d.visualization.draw_geometries([pcd])
+
+    img = cv2.normalize(img, None, 0, 1.0, cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+    img = (img*255).astype(np.uint8)
+    cv2.imwrite('images/%05d_depth.jpg'%0, img)
+
+    img, _ = robot.sim.render(mode='rgb_array', distance=0.6, target_position=[0,0,0.1], yaw=90)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    cv2.imwrite('images/%05d_rgb.jpg'%0, img)
+
 if __name__ == '__main__':
+    if not os.path.exists('images'):
+        os.mkdir('images')
+
     sim = PyBullet(render=True)
     robot = Panda(sim, block_gripper=False, base_position=np.array([-0.6, 0.0, 0.0]), control_type="ee")
     task = Manipulate(sim)
@@ -109,33 +169,26 @@ if __name__ == '__main__':
 
     print('before', np.round(robot.get_ee_orientation()), 2)
     robot.release()
-    robot.move(pos, goal_euler_xyz)
-    print('after', np.round(robot.get_ee_orientation()), 2)
-    
-    robot.grasp()
-    robot.move(pos + np.array([0,0,0.15]), goal_euler_xyz)
+
+    #print('after', np.round(robot.get_ee_orientation()), 2)
+    #robot.move(pos, goal_euler_xyz)
+    #robot.grasp()
+    #robot.move(pos + np.array([0,0,0.15]), goal_euler_xyz)
 
     for i in range(100):
         robot.sim.step()
 
-    robot.release()
-    
-    if not os.path.exists('images'):
-        os.mkdir('images')
+    #task.record(robot)
 
-    #img = robot.sim.render(mode='depth')
     img, points, colors = robot.sim.render(mode='depth', distance=0.6, target_position=[0,0,0.1], yaw=90)
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(points)
-    pcd.colors = o3d.utility.Vector3dVector(colors/255.)
-    o3d.visualization.draw_geometries([pcd])
 
+    #pcd = o3d.geometry.PointCloud()
 
-    img = cv2.normalize(img, None, 0, 1.0, cv2.NORM_MINMAX, dtype=cv2.CV_32F)
-    img = (img*255).astype(np.uint8)
-    cv2.imwrite('images/%05d_depth.jpg'%0, img)
+    #rot = R.from_euler('yz', [90,90], degrees=True).as_matrix()
+    #rot = R.from_euler('y', 180, degrees=True).as_matrix()@rot
+    #points = (rot@points.T).T
 
-    #img = robot.sim.render(mode='rgb_array')
-    img = robot.sim.render(mode='rgb_array', distance=0.6, target_position=[0,0,0.1], yaw=90)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    cv2.imwrite('images/%05d_rgb.jpg'%0, img)
+    data = {'xyz':points, 'xyz_color':colors}
+    np.save('0.npy', data)
+
+    visualize(img, points, colors)

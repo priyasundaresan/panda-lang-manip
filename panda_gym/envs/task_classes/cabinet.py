@@ -1,6 +1,8 @@
 import igibson
 from igibson.external.pybullet_tools.utils import quat_from_euler
 import os
+import open3d as o3d
+import cv2
 
 import pybullet as p
 
@@ -255,6 +257,24 @@ class Teleop:
         #for _ in range(50):
         #    robot.sim.step()
 
+def visualize(img, points, colors):
+    pcd = o3d.geometry.PointCloud()
+
+    rot = R.from_euler('yz', [90,90], degrees=True).as_matrix()
+    rot = R.from_euler('y', 180, degrees=True).as_matrix()@rot
+    points = (rot@points.T).T
+
+    pcd.points = o3d.utility.Vector3dVector(points)
+    pcd.colors = o3d.utility.Vector3dVector(colors/255.)
+    o3d.visualization.draw_geometries([pcd])
+
+    img = cv2.normalize(img, None, 0, 1.0, cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+    img = (img*255).astype(np.uint8)
+    cv2.imwrite('images/%05d_depth.jpg'%0, img)
+
+    img, _ = robot.sim.render(mode='rgb_array', distance=0.6, target_position=[0,0,0.1], yaw=90)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    cv2.imwrite('images/%05d_rgb.jpg'%0, img)
 
 if __name__ == '__main__':
     sim = PyBullet(render=True)
@@ -262,6 +282,10 @@ if __name__ == '__main__':
     robot = Panda(sim, block_gripper=False, base_position=np.array([-0.6, 0.0, 0.0]), control_type="ee")
     robot.reset()
     robot.release()
-    #while True:
-    #    robot.sim.step()
     task.teleop(robot)
+
+    #img, points, colors = robot.sim.render(mode='depth', distance=0.6, target_position=[0,0,0.1], yaw=90)
+    #data = {'xyz':points, 'xyz_color':colors}
+    #np.save('0.npy', data)
+
+    #visualize(img, points, colors)
