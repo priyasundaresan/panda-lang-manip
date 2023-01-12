@@ -183,11 +183,13 @@ class PyBullet:
                 points /= points[:, 3: 4]
                 points = points[:, :3]
 
-                z_low = np.where(points[:,2] > -0.1)
+                #z_low = np.where(points[:,2] > -0.1)
+                z_low = np.where(points[:,2] > 0.0)
+                #z_low = np.where(points[:,2] > 0.01)
                 y_low = np.where(points[:,0] > -0.5)
                 y_high= np.where(points[:,0] < 0.2)
-                idxs_valid = np.intersect1d(z_low, y_low)
-                idxs_valid = np.intersect1d(idxs_valid, y_high)
+                idxs_valid = np.intersect1d(z_low, y_high)
+                idxs_valid = np.intersect1d(idxs_valid, y_low)
                 points = points[idxs_valid]
                 colors = colors[idxs_valid]
             
