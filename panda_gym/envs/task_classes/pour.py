@@ -17,6 +17,9 @@ from panda_gym.envs.robots.panda_cartesian import Panda
 from scipy.spatial.transform import Slerp
 from scipy.spatial.transform import Rotation as R
 
+from sklearn.neighbors import NearestNeighbors
+import scipy.spatial as spatial
+
 class Pour:
     def __init__(
         self,
@@ -36,11 +39,6 @@ class Pour:
 
         self.sim.create_plane(z_offset=-0.4)
         self.sim.create_table(length=1.1, width=0.7, height=0.4, x_offset=-0.3)
-
-        #if loc1 is None:
-        #    loc1 = [0,-0.2,0.075]
-        #if loc2 is None:
-        #    loc2 = [0,-0.1,0.075]
 
         if 'cup1' in self.sim._bodies_idx:
             self.sim.set_base_pose('cup1', loc1, np.zeros(3))
@@ -88,8 +86,6 @@ class Pour:
         self.robot.release()
         
     def parameterized_pour(self, episode_idx):
-        #self.robot.reset()
-        #self.robot.release()
         self.reset_robot()
 
         pos, final_pos = self.reset_info
@@ -99,15 +95,14 @@ class Pour:
 
         img, pcl_points, pcl_colors, fmat = self.take_rgbd()
         #waypoints = [pos, final_pos, grasp_pos, pour_pos]
-        waypoints = [pos, final_pos]
+        waypoints = [grasp_pos, pour_pos]
+        pixels = self.project_waypoints(waypoints, fmat)
 
         ## Grasp cup
         #goal_euler_xyz = np.array([180,-35,90]) # standard
         #self.robot.move(pos + np.array([0,0,0.15]), goal_euler_xyz)
         #self.robot.move(pos - np.array([0,0,0.045]), goal_euler_xyz)
         #self.robot.grasp()
-
-        #waypoints.append(self.robot.get_ee_position())
 
         ## Lift
         #self.robot.move(pos + np.array([0,0,0.15]), goal_euler_xyz)
@@ -117,16 +112,11 @@ class Pour:
         #goal_euler_xyz = np.array([180,85,90])
         #self.robot.move(final_pos + np.array([0,-0.05,0.15]), goal_euler_xyz)
 
-        #waypoints.append(self.robot.get_ee_position())
-        ##img, pcl_points, pcl_colors, fmat = self.take_rgbd()
-
-        pixels = self.project_waypoints(waypoints, fmat)
-
-        self.visualize(img, pcl_points, pcl_colors, pixels)
-
         # Wait for pour to be done
-        for i in range(50):
-            self.sim.step()
+        #for i in range(50):
+        #    self.sim.step()
+
+        self.visualize(img, pcl_points, pcl_colors, waypoints, pixels)
 
         return waypoints, pixels
 
@@ -155,16 +145,50 @@ class Pour:
             pixels.append(pixel)
         return pixels
 
-    def visualize(self, img, points, colors, pixels):
-        #pcd = o3d.geometry.PointCloud()
+    def visualize(self, img, points, colors, waypoints, pixels):
+        start, end = waypoints
+        #idxs = np.random.choice(len(points), 2048)
+        #points = points[idxs]
+        #colors = colors[idxs]
+
+        nbrs = NearestNeighbors(n_neighbors=300, algorithm='ball_tree').fit(points)
+
+        distances, indices = nbrs.kneighbors(start.reshape(1,-1))
+        distances_normalized = (distances - np.amin(distances))/(np.amax(distances) - np.amin(distances))
+        distances_vis = np.ones((3,300))
+        distances_vis[1] = distances_normalized
+        distances_vis[2] = np.zeros((1,300))
+        distances_vis = distances_vis.T
+        colors[indices] = distances_vis*255
+
+        distances, indices = nbrs.kneighbors(end.reshape(1,-1))
+        distances_normalized = (distances - np.amin(distances))/(np.amax(distances) - np.amin(distances))
+        distances_vis = np.ones((3,300))
+        distances_vis[1] = distances_normalized
+        distances_vis[2] = np.zeros((1,300))
+        distances_vis = distances_vis.T
+        colors[indices] = distances_vis*255
+
+        points = np.vstack((points, waypoints[0]))
+        colors = np.vstack((colors, [0,0,0]))
+        points = np.vstack((points, waypoints[1]))
+        colors = np.vstack((colors, [0,0,0]))
+
+        #near = np.where(distances < 0.03)
+        #distances = distances[near]
+        #indices = indices[near]
+        
+        #print(np.amin(distances), np.amax(distances))
+        print(distances.shape, indices.shape)
+        
+        pcd = o3d.geometry.PointCloud()
+        rot = R.from_euler('yz', [90,90], degrees=True).as_matrix()
+        rot = R.from_euler('y', 180, degrees=True).as_matrix()@rot
+        points = (rot@points.T).T
     
-        #rot = R.from_euler('yz', [90,90], degrees=True).as_matrix()
-        #rot = R.from_euler('y', 180, degrees=True).as_matrix()@rot
-        #points = (rot@points.T).T
-    
-        #pcd.points = o3d.utility.Vector3dVector(points)
-        #pcd.colors = o3d.utility.Vector3dVector(colors/255.)
-        #o3d.visualization.draw_geometries([pcd])
+        pcd.points = o3d.utility.Vector3dVector(points)
+        pcd.colors = o3d.utility.Vector3dVector(colors/255.)
+        o3d.visualization.draw_geometries([pcd])
 
         for pixel in pixels:
             cv2.circle(img, tuple(pixel), 4, (255,0,0), -1)
