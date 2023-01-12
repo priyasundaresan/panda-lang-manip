@@ -94,6 +94,7 @@ class PyBullet:
         pitch: float = -30,
         roll: float = 0,
     ) -> Optional[np.ndarray]:
+
         """Render.
 
         If mode is "human", make the rendering real-time. All other arguments are
@@ -140,7 +141,6 @@ class PyBullet:
                 fov=60, aspect=float(width) / height, nearVal=0.1, farVal=100.0
             )
 
-
             (_, _, px, depth, _) = self.physics_client.getCameraImage(
                 width=width,
                 height=height,
@@ -183,10 +183,13 @@ class PyBullet:
                 points /= points[:, 3: 4]
                 points = points[:, :3]
 
-                z_valid = np.where(points[:,2] > -0.1)
-                points = points[z_valid]
-                colors = colors[z_valid]
-                
+                z_low = np.where(points[:,2] > -0.1)
+                y_low = np.where(points[:,0] > -0.5)
+                y_high= np.where(points[:,0] < 0.2)
+                idxs_valid = np.intersect1d(z_low, y_low)
+                idxs_valid = np.intersect1d(idxs_valid, y_high)
+                points = points[idxs_valid]
+                colors = colors[idxs_valid]
             
                 return depth, points, colors
 

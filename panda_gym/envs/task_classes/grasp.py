@@ -71,6 +71,7 @@ class Manipulate(Task):
     def reset(self) -> None:
         self.goal = self._sample_goal()
         object_position = self._sample_object()
+        self.object_position = object_position
         #self.sim.set_base_pose("target", self.goal, np.array([0.0, 0.0, 0.0, 1.0]))
         self.sim.set_base_pose("target", self.goal, object_position)
         self.sim.set_base_pose("object", object_position, np.array([0.0, 0.0, 0.0, 1.0]))
@@ -99,11 +100,12 @@ class Manipulate(Task):
         return 0
 
     def record(self, robot):
-        img, fmat = robot.sim.render(mode='rgb_array')
+        img, fmat = robot.sim.render(mode='rgb_array', distance=1.2)
         H,W,C = img.shape
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         position = robot.get_ee_position()
+        #position = self.goal
         print('POS', position)
         pixel = (fmat @ np.hstack((position, [1])))
         print(pixel)
@@ -167,18 +169,15 @@ if __name__ == '__main__':
     pos = task.reset()
     goal_euler_xyz = np.array([180,0,0]) # standard
 
-    print('before', np.round(robot.get_ee_orientation()), 2)
     robot.release()
-
-    #print('after', np.round(robot.get_ee_orientation()), 2)
-    #robot.move(pos, goal_euler_xyz)
-    #robot.grasp()
-    #robot.move(pos + np.array([0,0,0.15]), goal_euler_xyz)
+    robot.move(pos, goal_euler_xyz)
+    robot.grasp()
+    robot.move(pos + np.array([0,0,0.15]), goal_euler_xyz)
 
     for i in range(100):
         robot.sim.step()
 
-    #task.record(robot)
+    task.record(robot)
 
     img, points, colors = robot.sim.render(mode='depth', distance=0.6, target_position=[0,0,0.1], yaw=90)
 
