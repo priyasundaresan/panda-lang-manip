@@ -184,8 +184,8 @@ class PyBullet:
                 points = points[:, :3]
 
                 #z_low = np.where(points[:,2] > -0.1)
-                z_low = np.where(points[:,2] > 0.0)
-                #z_low = np.where(points[:,2] > 0.01)
+                #z_low = np.where(points[:,2] > 0.0)
+                z_low = np.where(points[:,2] > 0.002)
                 y_low = np.where(points[:,0] > -0.5)
                 y_high= np.where(points[:,0] < 0.2)
                 idxs_valid = np.intersect1d(z_low, y_high)

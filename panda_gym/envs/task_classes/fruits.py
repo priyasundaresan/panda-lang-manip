@@ -100,6 +100,11 @@ if __name__ == '__main__':
     task = Manipulate(sim)
     robot.reset()
 
+    goal_euler_xyz = np.array([180,0,0]) # standard
+    robot.reset()
+    robot.move(np.array([0,0,0.6]), goal_euler_xyz)
+    robot.release()
+
     pos, final_pos = task.reset()
 
     for i in range(100):

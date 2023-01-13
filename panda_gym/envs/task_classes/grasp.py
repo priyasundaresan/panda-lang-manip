@@ -167,15 +167,18 @@ if __name__ == '__main__':
     thresh = 5e-3
 
     pos = task.reset()
+
     goal_euler_xyz = np.array([180,0,0]) # standard
-
+    robot.reset()
+    robot.move(np.array([0,0,0.6]), goal_euler_xyz)
     robot.release()
-    robot.move(pos, goal_euler_xyz)
-    robot.grasp()
-    robot.move(pos + np.array([0,0,0.15]), goal_euler_xyz)
 
-    for i in range(100):
-        robot.sim.step()
+    #robot.move(pos, goal_euler_xyz)
+    #robot.grasp()
+    #robot.move(pos + np.array([0,0,0.15]), goal_euler_xyz)
+
+    #for i in range(100):
+    #    robot.sim.step()
 
     task.record(robot)
 
