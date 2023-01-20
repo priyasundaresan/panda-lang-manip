@@ -158,7 +158,7 @@ class Pour:
         start, end = waypoints
 
         # Subsample points
-        idxs = np.random.choice(len(points), 5000)
+        idxs = np.random.choice(len(points), min(5000, len(points)))
         points = points[idxs]
         colors = colors[idxs]
 
@@ -166,24 +166,35 @@ class Pour:
         offsets = np.zeros_like(points)
         nbrs = NearestNeighbors(n_neighbors=800, algorithm='ball_tree').fit(points)
 
+        #norm = np.linalg.norm(offsets, axis=1)
+
+        cls = np.zeros(len(points))
+
         distances, indices = nbrs.kneighbors(start.reshape(1,-1))
         offsets[indices] = points[indices] - start
+        cls[indices] = 1.0
         distances, indices = nbrs.kneighbors(end.reshape(1,-1))
         offsets[indices] = points[indices] - end
+        cls[indices] = 2.0
+
+        #cls[np.where(np.linalg.norm(offsets, axis=1) > 0)] = 1.0
 
         # Save points, colors, offsets
-        data = {'xyz':points, 'xyz_color':colors, 'gripper_offsets':offsets}
+        data = {'xyz':points, 'xyz_color':colors, 'start_waypoint':start, 'end_waypoint':end, 'cls':cls}
         np.save('dset/%d.npy'%episode_idx, data)
 
         if visualize:
+            offsets_vis = colors.copy()
             distances_vis = np.ones((3, len(points)))
             distances = np.linalg.norm(offsets, axis=1)
             distances_normalized = (distances - np.amin(distances))/(np.amax(distances) - np.amin(distances))
             distances_vis[1] = distances_normalized
             distances_vis[2] = distances_normalized
             distances_vis = distances_vis.T
-            colors[indices] = (0,0,0)
-            colors += (distances_vis*255).astype(np.uint8)
+            offsets_vis[indices] = (0,0,0)
+            offsets_vis += (distances_vis*255).astype(np.uint8)
+    
+            cls_vis = (np.vstack((cls, cls, cls)).T)*100
 
             pcd = o3d.geometry.PointCloud()
             rot = R.from_euler('yz', [90,90], degrees=True).as_matrix()
@@ -191,13 +202,13 @@ class Pour:
             points = (rot@points.T).T
     
             pcd.points = o3d.utility.Vector3dVector(points)
-            pcd.colors = o3d.utility.Vector3dVector(colors/255.)
+            pcd.colors = o3d.utility.Vector3dVector(cls_vis/255.)
             o3d.visualization.draw_geometries([pcd])
 
-            for pixel in pixels:
-                cv2.circle(img, tuple(pixel), 4, (255,0,0), -1)
-            cv2.imshow('img', img)
-            cv2.waitKey(0)
+            #for pixel in pixels:
+            #    cv2.circle(img, tuple(pixel), 4, (255,0,0), -1)
+            #cv2.imshow('img', img)
+            #cv2.waitKey(0)
     
 if __name__ == '__main__':
     sim = PyBullet(render=True, background_color=np.array([255,255,255]))
@@ -212,8 +223,8 @@ if __name__ == '__main__':
     task = Pour(sim, robot)
     task.reset_robot()
     start = time.time()
-    #for i in range(200):
-    for i in range(50):
+    for i in range(200):
+    #for i in range(50):
         print(i)
         task.reset()
         task.parameterized_pour(i)
