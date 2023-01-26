@@ -102,8 +102,10 @@ class Pour:
         pour_pos = final_pos + np.array([0,-0.05,0.15])
 
         img, pcl_points, pcl_colors, fmat = self.take_rgbd()
-        #waypoints = [pos, final_pos, grasp_pos, pour_pos]
         waypoints = [grasp_pos, pour_pos]
+        start_ori = R.from_euler('xyz', np.array([180,-35,90]), degrees=True).as_quat()  
+        end_ori = R.from_euler('xyz', np.array([180,85,90]), degrees=True).as_quat() 
+        orientations = [start_ori, end_ori]
         pixels = self.project_waypoints(waypoints, fmat)
 
         ## Grasp cup
@@ -124,8 +126,7 @@ class Pour:
         #for i in range(50):
         #    self.sim.step()
 
-        self.record(img, pcl_points, pcl_colors, waypoints, pixels, episode_idx, visualize=False)
-        #self.record(img, pcl_points, pcl_colors, waypoints, pixels, episode_idx, visualize=True)
+        self.record(img, pcl_points, pcl_colors, waypoints, orientations, pixels, episode_idx, visualize=False)
         return waypoints, pixels
 
     def take_rgbd(self):
@@ -153,9 +154,10 @@ class Pour:
             pixels.append(pixel)
         return pixels
 
-    def record(self, img, points, colors, waypoints, pixels, episode_idx, visualize=True):
+    def record(self, img, points, colors, waypoints, orientations, pixels, episode_idx, visualize=True):
 
         start, end = waypoints
+        start_ori, end_ori = orientations
 
         # Subsample points
         idxs = np.random.choice(len(points), min(5000, len(points)))
@@ -180,7 +182,7 @@ class Pour:
         #cls[np.where(np.linalg.norm(offsets, axis=1) > 0)] = 1.0
 
         # Save points, colors, offsets
-        data = {'xyz':points, 'xyz_color':colors, 'start_waypoint':start, 'end_waypoint':end, 'cls':cls}
+        data = {'xyz':points, 'xyz_color':colors, 'start_waypoint':start, 'end_waypoint':end, 'cls':cls, 'start_ori':start_ori, 'end_ori':end_ori}
         np.save('dset/%d.npy'%episode_idx, data)
 
         if visualize:
@@ -223,8 +225,9 @@ if __name__ == '__main__':
     task = Pour(sim, robot)
     task.reset_robot()
     start = time.time()
-    for i in range(200):
+    #for i in range(200):
     #for i in range(50):
+    for i in range(5):
         print(i)
         task.reset()
         task.parameterized_pour(i)
