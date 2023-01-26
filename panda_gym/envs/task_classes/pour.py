@@ -214,10 +214,8 @@ class Pour:
     
 if __name__ == '__main__':
     sim = PyBullet(render=True, background_color=np.array([255,255,255]))
+    #sim = PyBullet(render=False, background_color=np.array([255,255,255]))
     robot = Panda(sim, block_gripper=False, base_position=np.array([-0.6, 0.0, 0.0]), control_type="ee")
-
-    #if not os.path.exists('images'):
-    #    os.mkdir('images')
 
     if not os.path.exists('dset'):
         os.mkdir('dset')
