@@ -212,10 +212,8 @@ class Pour:
     
 if __name__ == '__main__':
     sim = PyBullet(render=True, background_color=np.array([255,255,255]))
+    #sim = PyBullet(render=False, background_color=np.array([255,255,255]))
     robot = Panda(sim, block_gripper=False, base_position=np.array([-0.6, 0.0, 0.0]), control_type="ee")
-
-    #if not os.path.exists('images'):
-    #    os.mkdir('images')
 
     if not os.path.exists('dset'):
         os.mkdir('dset')
@@ -223,8 +221,9 @@ if __name__ == '__main__':
     task = Pour(sim, robot)
     task.reset_robot()
     start = time.time()
-    for i in range(200):
+    #for i in range(200):
     #for i in range(50):
+    for i in range(5):
         print(i)
         task.reset()
         task.parameterized_pour(i)
