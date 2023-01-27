@@ -76,9 +76,10 @@ class Pour:
         return self.reset_info
 
     def reset_sim(self):
-        cup1_loc = np.random.uniform([-0.2,-0.3,0.075], [0.0,-0.2,0.075])
-        cup2_loc  = np.random.uniform([-0.1,-0.1,0.075], [0.0, 0.1,0.075])
-        return cup1_loc, cup2_loc
+        loc1 = np.random.uniform([-0.2,-0.3,0.075], [0.0,-0.2,0.075])
+        loc2  = np.random.uniform([-0.1,-0.1,0.075], [0.0, 0.1,0.075])
+        #return cup1_loc, cup2_loc
+        return loc1, loc2
 
     def reset_robot(self):
         self.robot.reset()
@@ -126,7 +127,8 @@ class Pour:
         #for i in range(50):
         #    self.sim.step()
 
-        self.record(img, pcl_points, pcl_colors, waypoints, orientations, pixels, episode_idx, visualize=False)
+        #self.record(img, pcl_points, pcl_colors, waypoints, orientations, pixels, episode_idx, visualize=False)
+        self.record(img, pcl_points, pcl_colors, waypoints, orientations, pixels, episode_idx, visualize=True)
         return waypoints, pixels
 
     def take_rgbd(self):
@@ -207,8 +209,10 @@ class Pour:
             pcd.colors = o3d.utility.Vector3dVector(cls_vis/255.)
             o3d.visualization.draw_geometries([pcd])
 
-            #for pixel in pixels:
-            #    cv2.circle(img, tuple(pixel), 4, (255,0,0), -1)
+            for pixel in pixels:
+                cv2.circle(img, tuple(pixel), 4, (255,0,0), -1)
+            cv2.imwrite('images/%05d.jpg'%episode_idx, img)
+
             #cv2.imshow('img', img)
             #cv2.waitKey(0)
     
@@ -220,32 +224,16 @@ if __name__ == '__main__':
     if not os.path.exists('dset'):
         os.mkdir('dset')
 
+    if not os.path.exists('images'):
+        os.mkdir('images')
+
     task = Pour(sim, robot)
     task.reset_robot()
     start = time.time()
-    #for i in range(200):
-    #for i in range(50):
-    for i in range(5):
+    for i in range(10):
         print(i)
         task.reset()
         task.parameterized_pour(i)
     end = time.time()
 
     print(end-start)
-
-    #img = robot.sim.render(mode='depth')
-    #img, pointcloud = robot.sim.render(mode='depth', distance=0.6, target_position=[0,0,0.1], yaw=90)
-    #pcd = o3d.geometry.PointCloud()
-    #points = pointcloud[:,:,:3].reshape(-1,3)
-    #pcd.points = o3d.utility.Vector3dVector(points)
-    #o3d.visualization.draw_geometries([pcd])
-
-
-    #img = cv2.normalize(img, None, 0, 1.0, cv2.NORM_MINMAX, dtype=cv2.CV_32F)
-    #img = (img*255).astype(np.uint8)
-    #cv2.imwrite('images/%05d_depth.jpg'%0, img)
-
-    ##img = robot.sim.render(mode='rgb_array')
-    #img = robot.sim.render(mode='rgb_array', distance=0.6, target_position=[0,0,0.1], yaw=90)
-    #img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    #cv2.imwrite('images/%05d_rgb.jpg'%0, img)
