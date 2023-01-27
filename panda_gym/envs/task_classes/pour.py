@@ -1,4 +1,5 @@
 from typing import Any, Dict
+import random
 import time
 import os
 
@@ -76,9 +77,13 @@ class Pour:
         return self.reset_info
 
     def reset_sim(self):
-        cup1_loc = np.random.uniform([-0.2,-0.3,0.075], [0.0,-0.2,0.075])
-        cup2_loc  = np.random.uniform([-0.1,-0.1,0.075], [0.0, 0.1,0.075])
-        return cup1_loc, cup2_loc
+        loc1 = np.random.uniform([-0.2,-0.3,0.075], [0.0,-0.2,0.075])
+        loc2  = np.random.uniform([-0.1,-0.1,0.075], [0.0, 0.1,0.075])
+        #return cup1_loc, cup2_loc
+        if random.random() < 0.5:
+            return loc1, loc2
+        else:
+            return loc2, loc1
 
     def reset_robot(self):
         self.robot.reset()
@@ -95,34 +100,40 @@ class Pour:
         
     def parameterized_pour(self, episode_idx):
         #self.reset_robot()
-
         pos, final_pos = self.reset_info
+        if pos[1] >= -0.3 and pos[1] <= -0.2: 
+            alpha = 1
+        else:
+            alpha = -1
 
+        approach_pos = pos + np.array([0,0,0.15])
         grasp_pos = pos - np.array([0,0,0.045])
-        pour_pos = final_pos + np.array([0,-0.05,0.15])
+        pour_pos = final_pos + np.array([0,alpha*(-0.05),0.15])
+        grasp_euler = np.array([180,alpha*(-35),90])
+        pour_euler = np.array([180,alpha*85,90])
 
         img, pcl_points, pcl_colors, fmat = self.take_rgbd()
+
         waypoints = [grasp_pos, pour_pos]
-        start_ori = R.from_euler('xyz', np.array([180,-35,90]), degrees=True).as_quat()  
-        end_ori = R.from_euler('xyz', np.array([180,85,90]), degrees=True).as_quat() 
+        start_ori = R.from_euler('xyz', grasp_euler, degrees=True).as_quat()  
+        end_ori = R.from_euler('xyz', pour_euler, degrees=True).as_quat() 
         orientations = [start_ori, end_ori]
+
         pixels = self.project_waypoints(waypoints, fmat)
 
         ## Grasp cup
-        #goal_euler_xyz = np.array([180,-35,90]) # standard
-        #self.robot.move(pos + np.array([0,0,0.15]), goal_euler_xyz)
-        #self.robot.move(pos - np.array([0,0,0.045]), goal_euler_xyz)
+        #self.robot.move(approach_pos, grasp_euler)
+        #self.robot.move(grasp_pos, grasp_euler)
         #self.robot.grasp()
 
         ## Lift
-        #self.robot.move(pos + np.array([0,0,0.15]), goal_euler_xyz)
+        #self.robot.move(approach_pos, grasp_euler)
 
         ## Pour into other cup
-        #self.robot.move(final_pos + np.array([0,-0.05,0.15]), goal_euler_xyz)
-        #goal_euler_xyz = np.array([180,85,90])
-        #self.robot.move(final_pos + np.array([0,-0.05,0.15]), goal_euler_xyz)
+        #self.robot.move(pour_pos, grasp_euler)
+        #self.robot.move(pour_pos, pour_euler)
 
-        # Wait for pour to be done
+        ## Wait for pour to be done
         #for i in range(50):
         #    self.sim.step()
 
@@ -224,14 +235,13 @@ if __name__ == '__main__':
     task.reset_robot()
     start = time.time()
     #for i in range(200):
-    #for i in range(50):
-    for i in range(5):
+    for i in range(50):
+    #for i in range(5):
+    #for i in range(1):
         print(i)
         task.reset()
         task.parameterized_pour(i)
     end = time.time()
-
-    print(end-start)
 
     #img = robot.sim.render(mode='depth')
     #img, pointcloud = robot.sim.render(mode='depth', distance=0.6, target_position=[0,0,0.1], yaw=90)
