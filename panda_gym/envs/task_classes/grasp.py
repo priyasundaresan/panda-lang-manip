@@ -101,6 +101,7 @@ class Manipulate(Task):
 
     def record(self, robot):
         img, fmat = robot.sim.render(mode='rgb_array', distance=1.2)
+        #img, fmat = robot.sim.render(mode='rgb_array', distance=0.5, yaw=270)
         H,W,C = img.shape
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
@@ -185,7 +186,6 @@ if __name__ == '__main__':
     img, points, colors = robot.sim.render(mode='depth', distance=0.6, target_position=[0,0,0.1], yaw=90)
 
     #pcd = o3d.geometry.PointCloud()
-
     #rot = R.from_euler('yz', [90,90], degrees=True).as_matrix()
     #rot = R.from_euler('y', 180, degrees=True).as_matrix()@rot
     #points = (rot@points.T).T

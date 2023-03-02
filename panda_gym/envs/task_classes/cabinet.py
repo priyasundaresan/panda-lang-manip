@@ -1,17 +1,15 @@
-import igibson
-from igibson.external.pybullet_tools.utils import quat_from_euler
-import os
-import open3d as o3d
-import cv2
-
-import pybullet as p
-
-import time
 from typing import Any, Dict
+import random
+import time
+import os
 
 import numpy as np
+import cv2
+import open3d as o3d
 
 from panda_gym.envs.core import Task
+from panda_gym.pybullet import PyBullet
+from panda_gym.utils import distance
 
 # NEW
 from panda_gym.pybullet import PyBullet
@@ -20,272 +18,199 @@ from panda_gym.envs.robots.panda_cartesian import Panda
 from scipy.spatial.transform import Slerp
 from scipy.spatial.transform import Rotation as R
 
-from pynput import keyboard
+from sklearn.neighbors import NearestNeighbors
+import scipy.spatial as spatial
 
-from igibson.objects.articulated_object import ArticulatedObject
-from igibson.simulator import Simulator
-from igibson.render.mesh_renderer.mesh_renderer_cpu import MeshRendererSettings
-
-class Teleop:
+class Open:
     def __init__(
         self,
         sim: PyBullet,
-        goal_xy_range: float = 0.3,
-        goal_z_range: float = 0.2,
-        obj_xy_range: float = 0.3,
+        robot: Panda,
     ) -> None:
-        self.settings = MeshRendererSettings(enable_shadow=False, msaa=False, texture_scale=0.5)
-        self.headless=False
-        self.gibson_sim = Simulator(
-            mode="gui_interactive" if not self.headless else "headless",
-            image_width=512,
-            image_height=512,
-            rendering_settings=self.settings)
-
-        sim.physics_client.setGravity(0,0,-9.8)
-        sim.timestep = 1./240.
-
+        self.robot = robot
         self.sim = sim
-
-        with self.sim.no_rendering():
-            self._create_scene()
-            #self.sim.place_visualizer(target_position=np.zeros(3), distance=0.9, yaw=45, pitch=-30)
-            self.sim.place_visualizer(target_position=np.zeros(3), distance=0.9, yaw=90, pitch=-30)
+        self.sim.place_visualizer(target_position=np.zeros(3), distance=0.9, yaw=45, pitch=-30)
+        self.body_id_mapping = {}
 
     def _create_scene(self) -> None:
         """Create the scene."""
-        #self.sim.create_plane(z_offset=-0.4)
-        #self.sim.create_table(length=1.1, width=0.7, height=0.4, x_offset=-0.3)
-        
-        #cabinet_0007 = os.path.join(
-        #    igibson.assets_path, 'models/cabinet2/cabinet_0007.urdf')
+        self.loc = self.reset_sim()
 
-        cabinet_0007 = os.path.join(
-            igibson.assets_path, 'models/cabinet3/cabinet_0007.urdf')
-
-        obj1 = ArticulatedObject(filename=cabinet_0007, scale=0.8)
-        obj1.load(self.gibson_sim)
-        obj1.set_position_orientation([0,0.65,0], R.from_euler('z', -90, degrees=True).as_quat())
-        
         self.sim.create_plane(z_offset=-0.4)
         self.sim.create_table(length=1.1, width=0.7, height=0.4, x_offset=-0.3)
+        cabinet_ori = R.from_euler('xyz', [0,0,-90], degrees=True).as_quat()  
 
-        self.object_size = 0.04
-        self.sim.create_box(
-            body_name="object",
-            half_extents=np.ones(3) * self.object_size / 2,
-            mass=1.0,
-            position=np.array([0.0, 0.0, self.object_size / 2]),
-            rgba_color=np.array([0.1, 0.9, 0.1, 1.0]),
-        )
-        
-        #self.sim.physics_client.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
-        #self.sim.physics_client.configureDebugVisualizer(p.COV_ENABLE_MOUSE_PICKING, 1)
+        self.CANONICAL_POS = [0,0.5,0]
 
-    def get_obs(self) -> np.ndarray:
-        # position, rotation of the object
-        object_position = self.sim.get_base_position("object")
-        object_rotation = self.sim.get_base_rotation("object")
-        object_velocity = self.sim.get_base_velocity("object")
-        object_angular_velocity = self.sim.get_base_angular_velocity("object")
-        observation = np.concatenate([object_position, object_rotation, object_velocity, object_angular_velocity])
-        return observation
+        if 'cabinet' in self.body_id_mapping:
+            self.sim.physics_client.removeBody(self.body_id_mapping['cabinet'])
+            self.sim._bodies_idx.pop('cabinet')
+        cabinet = self.sim.loadURDF(body_name='cabinet', fileName='cabinet_assets/cabinet/mobility.urdf', basePosition=self.loc, baseOrientation=cabinet_ori, globalScaling=0.5)
+        self.body_id_mapping['cabinet'] = cabinet
 
-    def reset(self) -> None:
-        return np.zeros(3), np.zeros(3)
+    def reset_sim(self):
+        loc = np.array([np.random.uniform(-0.2,0.05), np.random.uniform(0.45,0.65), 0])
+        return loc
 
-    #def teleop(self, robot):
-    #    pos, goal = task.reset()
-    #    grasped = False
-    #    last = ''
-    #    vel = 1
-    #    offset = 0.03
-    #    curr_euler = robot.get_ee_orientation()
-    #    reset_pos = robot.get_ee_position()
+    def reset_robot(self):
+        self.robot.reset()
+        goal_euler_xyz = np.array([180,0,0]) # standard
+        self.robot.move(np.array([0,0,0.6]), goal_euler_xyz)
+        self.robot.release()
 
-    #    robot.move(pos + np.array([0,0,0.02]), curr_euler)
-    #    while True:
-    #        curr_pos = robot.get_ee_position()
-    #        curr_euler = robot.get_ee_orientation()
-    #        with keyboard.Events() as events:
-    #            event = events.get(10.0)
-    #            if event is None:
-    #                robot.sim.step()
-    #            else:
-    #                if 'char' in dir(event.key):
-    #                    if event.key.char == last:
-    #                        vel *= 1.05
-    #                    else:
-    #                        vel = 1.
-    #                        offset = 0.03
+    def reset(self):
+        with self.sim.no_rendering():
+            self._create_scene()
+        for i in range(10):
+            self.sim.step()
+        #self.reset_robot()
 
-    #                    new_offset = offset * vel
-    #                    offset = new_offset
-    #                    if event.key.char == 'j':
-    #                        robot.move(curr_pos - np.array([0,0,offset]), curr_euler)
-    #                    elif event.key.char == 'k':
-    #                        robot.move(curr_pos + np.array([0,0,offset]), curr_euler)
-    #                    elif event.key.char == 'o':
-    #                        robot.move(curr_pos + np.array([offset,0,0]), curr_euler)
-    #                    elif event.key.char == 'i':
-    #                        robot.move(curr_pos + np.array([-offset,0,0]), curr_euler)
-    #                    elif event.key.char == 'l':
-    #                        robot.move(curr_pos + np.array([0,offset,0]), curr_euler)
-    #                    elif event.key.char == 'h':
-    #                        robot.move(curr_pos + np.array([0,-offset,0]), curr_euler)
-    #                    elif 'q' in str(event.key):
-    #                        break
-    #                    elif 'r' in str(event.key):
-    #                        curr_euler = np.array([-180,0,0])
-    #                        #robot.move(curr_pos, curr_euler)
-    #                        robot.move(reset_pos, curr_euler)
-    #                    last = event.key.char
-    #                elif event.key == keyboard.Key.space:
-    #                    if not grasped:
-    #                        robot.grasp()
-    #                        grasped = True
-    #                    else:
-    #                        robot.release()
-    #                        grasped = False
-    #                elif event.key == keyboard.Key.esc:
-    #                    break
-    #                elif event.key == keyboard.Key.right:
-    #                    offset = np.array([0,0,10])
-    #                    robot.move(curr_pos, curr_euler + offset)
-    #                elif event.key == keyboard.Key.left:
-    #                    offset = np.array([0,0,-10])
-    #                    robot.move(curr_pos, curr_euler + offset)
-    #                elif event.key == keyboard.Key.up:
-    #                    #offset = np.array([0,10,0])
-    #                    #offset = np.array([10,0,0])
-    #                    offset = np.array([90,0,0])
-    #                    robot.move(curr_pos, curr_euler + offset)
-    #                elif event.key == keyboard.Key.down:
-    #                    #offset = np.array([0,-10,0])
-    #                    #offset = np.array([-10,0,0])
-    #                    offset = np.array([-90,0,0])
-    #                    robot.move(curr_pos, curr_euler + offset)
+    def take_rgbd(self):
+        img, fmat = self.robot.sim.render(mode='rgb_array', distance=0.85)
+        #img, fmat = self.robot.sim.render(mode='rgb_array', distance=0.6, target_position=[0,0,0.1], yaw=90)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-    #    #robot.move(goal, curr_euler)
-    #    #for _ in range(50):
-    #    #    robot.sim.step()
+        _, points, colors = self.robot.sim.render(mode='depth', distance=0.6, target_position=[0,0,0.1], yaw=90)
+        _, points1, colors1 = self.robot.sim.render(mode='depth', distance=0.6, target_position=[0,0,0.1], yaw=0)
 
-    def teleop(self, robot):
-        pos, goal = task.reset()
-        grasped = False
-        last = ''
-        vel = 1
-        offset = 0.02
-        curr_euler = robot.get_ee_orientation()
-        reset_pos = robot.get_ee_position()
+        points = np.vstack((points, points1))
+        colors = np.vstack((colors, colors1))
+        return img, points, colors, fmat
+    
+    def project_waypoints(self, waypoints, fmat):
+        pixels = []
+        for position in waypoints:
+            pixel = (fmat @ np.hstack((position, [1])))
+            x,y,z,w = pixel
+            x += 1
+            y += 1
+            x /= 2
+            y /= 2
+            x *= 480
+            y *= 480
+            y = 480 - y
+            pixel = (int(x), int(y))
+            pixels.append(pixel)
+        return pixels
 
-        robot.move(pos + np.array([0,0,0.02]), curr_euler)
-        while True:
-            curr_pos = robot.get_ee_position()
-            curr_euler = robot.get_ee_orientation()
-            with keyboard.Events() as events:
-                event = events.get(10.0)
-                if event is None:
-                    robot.sim.step()
-                else:
-                    if 'char' in dir(event.key):
-                        if event.key.char == last:
-                            last = 0
-                            vel *= 1.1
-                            if vel > 1.5:
-                                vel = 1.
-                        else:
-                            vel = 1.
-                            offset = 0.02
+    def execute(self, episode_idx):
+        TOP_LEFT_POS = np.array([-0.1,0,0.2])
+        TOP_RIGHT_POS = np.array([0.1,0,0.2])
+        BOTTOM_POS = np.array([0.0,0,0.1])
+        #approach_pos = random.choice((TOP_LEFT_POS, TOP_RIGHT_POS, BOTTOM_POS)) 
+        #approach_pos = TOP_RIGHT_POS
+        #approach_pos = TOP_LEFT_POS
+        approach_pos = BOTTOM_POS
+        approach_pos += self.loc - self.CANONICAL_POS
+        grasp_euler = np.array([-90,0,0])
+        grasp_pos = approach_pos.copy()
+        grasp_pos[1] = 0.36
 
-                        new_offset = offset * vel
-                        offset = new_offset
-                        if event.key.char == 'j':
-                            robot.move(curr_pos - np.array([0,0,offset]), curr_euler)
-                        elif event.key.char == 'k':
-                            robot.move(curr_pos + np.array([0,0,offset]), curr_euler)
-                        elif event.key.char == 'o':
-                            robot.move(curr_pos + np.array([offset,0,0]), curr_euler)
-                        elif event.key.char == 'i':
-                            robot.move(curr_pos + np.array([-offset,0,0]), curr_euler)
-                        elif event.key.char == 'l':
-                            robot.move(curr_pos + np.array([0,offset,0]), curr_euler)
-                        elif event.key.char == 'h':
-                            robot.move(curr_pos + np.array([0,-offset,0]), curr_euler)
-                        elif 'q' in str(event.key):
-                            break
-                        elif 'r' in str(event.key):
-                            curr_euler = np.array([-180,0,0])
-                            robot.move(reset_pos, curr_euler)
-                        elif 'a' in str(event.key):
-                            curr_euler = np.array([-90,0,0])
-                            robot.move(curr_pos, curr_euler)
-                        elif 's' in str(event.key):
-                            curr_euler = np.array([90,0,0])
-                            robot.move(curr_pos, curr_euler)
-                        elif 'd' in str(event.key):
-                            curr_euler = np.array([180,0,90])
-                            robot.move(curr_pos, curr_euler)
-                        elif 'f' in str(event.key):
-                            robot.move(reset_pos, curr_euler)
-                        last = event.key.char
+        img, pcl_points, pcl_colors, fmat = self.take_rgbd()
+        waypoints = [grasp_pos, approach_pos]
+        start_ori = R.from_euler('xyz', grasp_euler, degrees=True).as_quat()  
+        end_ori = R.from_euler('xyz', grasp_euler, degrees=True).as_quat() 
+        orientations = [start_ori, end_ori]
 
-                    elif event.key == keyboard.Key.space:
-                        if not grasped:
-                            robot.grasp()
-                            grasped = True
-                        else:
-                            robot.release()
-                            grasped = False
+        pixels = self.project_waypoints(waypoints, fmat)
 
-                    elif event.key == keyboard.Key.esc:
-                        break
-                    elif event.key == keyboard.Key.right:
-                        offset = np.array([0,0,10])
-                        robot.move(curr_pos, curr_euler + offset)
-                    elif event.key == keyboard.Key.left:
-                        offset = np.array([0,0,-10])
-                        robot.move(curr_pos, curr_euler + offset)
-                    elif event.key == keyboard.Key.up:
-                        offset = np.array([0,10,0])
-                        robot.move(curr_pos, curr_euler + offset)
-                    elif event.key == keyboard.Key.down:
-                        offset = np.array([0,-10,0])
-                        robot.move(curr_pos, curr_euler + offset)
+        #### Grasp cup
+        #self.robot.move(approach_pos, grasp_euler)
+        #for i in range(50):
+        #    self.sim.step()
+        #self.robot.move(grasp_pos, grasp_euler)
+        #for i in range(50):
+        #    self.sim.step()
+        #self.robot.grasp()
 
-        #robot.move(goal, curr_euler)
-        #for _ in range(50):
-        #    robot.sim.step()
+        #offset = approach_pos - grasp_pos
+        #num_steps = 35
+        #delta = offset/num_steps
 
-def visualize(img, points, colors):
-    pcd = o3d.geometry.PointCloud()
+        #for i in range(num_steps):
+        #    self.robot.move(grasp_pos + i*delta, grasp_euler)
 
-    rot = R.from_euler('yz', [90,90], degrees=True).as_matrix()
-    rot = R.from_euler('y', 180, degrees=True).as_matrix()@rot
-    points = (rot@points.T).T
+        #for i in range(50):
+        #    self.sim.step()
 
-    pcd.points = o3d.utility.Vector3dVector(points)
-    pcd.colors = o3d.utility.Vector3dVector(colors/255.)
-    o3d.visualization.draw_geometries([pcd])
+        #self.record(img, pcl_points, pcl_colors, waypoints, orientations, pixels, episode_idx, visualize=True)
+        self.record(img, pcl_points, pcl_colors, waypoints, orientations, pixels, episode_idx, visualize=False)
+        return waypoints, pixels
 
-    img = cv2.normalize(img, None, 0, 1.0, cv2.NORM_MINMAX, dtype=cv2.CV_32F)
-    img = (img*255).astype(np.uint8)
-    cv2.imwrite('images/%05d_depth.jpg'%0, img)
+    def record(self, img, points, colors, waypoints, orientations, pixels, episode_idx, visualize=True):
 
-    img, _ = robot.sim.render(mode='rgb_array', distance=0.6, target_position=[0,0,0.1], yaw=90)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    cv2.imwrite('images/%05d_rgb.jpg'%0, img)
+        start, end = waypoints
+        start_ori, end_ori = orientations
+
+        # Subsample points
+        idxs = np.random.choice(len(points), min(5000, len(points)))
+        points = points[idxs]
+        colors = colors[idxs]
+
+        # Set up offsets 
+        offsets = np.zeros_like(points)
+        nbrs = NearestNeighbors(n_neighbors=800, algorithm='ball_tree').fit(points)
+
+        cls = np.zeros(len(points))
+
+        distances, indices = nbrs.kneighbors(start.reshape(1,-1))
+        offsets[indices] = points[indices] - start
+        cls[indices] = 1.0
+        distances, indices = nbrs.kneighbors(end.reshape(1,-1))
+        offsets[indices] = points[indices] - end
+        cls[indices] = 2.0
+
+        # Save points, colors, offsets
+        data = {'xyz':points, 'xyz_color':colors, 'start_waypoint':start, 'end_waypoint':end, 'cls':cls, 'start_ori':start_ori, 'end_ori':end_ori}
+        np.save('dset/%d.npy'%episode_idx, data)
+
+        if visualize:
+            #offsets_vis = colors.copy()
+            #distances_vis = np.ones((3, len(points)))
+            #distances = np.linalg.norm(offsets, axis=1)
+            #distances_normalized = (distances - np.amin(distances))/(np.amax(distances) - np.amin(distances))
+            #distances_vis[1] = distances_normalized
+            #distances_vis[2] = distances_normalized
+            #distances_vis = distances_vis.T
+            #offsets_vis[indices] = (0,0,0)
+            #offsets_vis += (distances_vis*255).astype(np.uint8)
+    
+            #cls_vis = (np.vstack((cls, cls, cls)).T)*100
+
+            #pcd = o3d.geometry.PointCloud()
+            #rot = R.from_euler('yz', [90,90], degrees=True).as_matrix()
+            #rot = R.from_euler('y', 180, degrees=True).as_matrix()@rot
+            #points = (rot@points.T).T
+    
+            #pcd.points = o3d.utility.Vector3dVector(points)
+            ##pcd.colors = o3d.utility.Vector3dVector(cls_vis/255.)
+            #pcd.colors = o3d.utility.Vector3dVector(offsets_vis/255.)
+
+            #o3d.visualization.draw_geometries([pcd])
+
+            for pixel in pixels:
+                cv2.circle(img, tuple(pixel), 4, (255,0,0), -1)
+            cv2.imwrite('images/%05d.jpg'%episode_idx, img)
+
+            cv2.imshow('img', img)
+            cv2.waitKey(0)
 
 if __name__ == '__main__':
-    sim = PyBullet(render=True)
-    task = Teleop(sim)
+    sim = PyBullet(render=True, background_color=np.array([255,255,255]))
+    #sim = PyBullet(render=False, background_color=np.array([255,255,255]))
     robot = Panda(sim, block_gripper=False, base_position=np.array([-0.6, 0.0, 0.0]), control_type="ee")
-    robot.reset()
-    robot.release()
-    task.teleop(robot)
 
-    #img, points, colors = robot.sim.render(mode='depth', distance=0.6, target_position=[0,0,0.1], yaw=90)
-    #data = {'xyz':points, 'xyz_color':colors}
-    #np.save('0.npy', data)
+    if not os.path.exists('dset'):
+        os.mkdir('dset')
+    if not os.path.exists('images'):
+        os.mkdir('images')
 
-    #visualize(img, points, colors)
+    task = Open(sim, robot)
+    task.reset_robot()
+    start = time.time()
+    #for i in range(100):
+    for i in range(20):
+        print(i)
+        task.reset()
+        task.execute(i)
+    #end = time.time()

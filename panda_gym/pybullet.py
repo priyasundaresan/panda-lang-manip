@@ -1,4 +1,5 @@
 import os
+import cv2
 import time
 import warnings
 from contextlib import contextmanager
@@ -66,6 +67,107 @@ class PyBullet:
         """
         return self.physics_client.saveState()
 
+    def render(
+        self,
+        width: int = 480,
+        height: int = 480,
+        target_position: Optional[np.ndarray] = np.zeros(3),
+        distance: float = 1.4,
+        yaw: float = 45,
+        pitch: float = -30,
+        roll: float = 0,
+        waypoints=None
+    ) -> Optional[np.ndarray]:
+
+        target_position = target_position if target_position is not None else np.zeros(3)
+
+        if self.connection_mode == p.DIRECT:
+            warnings.warn(
+                "The use of the render method is not recommended when the environment "
+                "has not been created with render=True. The rendering will probably be weird. "
+                "Prefer making the environment with option `render=True`. For example: "
+                "`env = gym.make('PandaReach-v3', render=True)`.",
+                UserWarning,
+            )
+        view_matrix = self.physics_client.computeViewMatrixFromYawPitchRoll(
+            cameraTargetPosition=target_position,
+            distance=distance,
+            yaw=yaw,
+            pitch=pitch,
+            roll=roll,
+            upAxisIndex=2,
+        )
+
+        proj_matrix = self.physics_client.computeProjectionMatrixFOV(
+            fov=60, aspect=float(width) / height, nearVal=0.1, farVal=100.0
+        )
+
+        (_, _, px, depth, _) = self.physics_client.getCameraImage(
+            width=width,
+            height=height,
+            viewMatrix=view_matrix,
+            projectionMatrix=proj_matrix,
+            renderer=p.ER_BULLET_HARDWARE_OPENGL,
+        )
+
+        #return px
+        depth = np.array(depth).reshape(height, width)
+        rgb = np.array(px).reshape((height, width, 4)).astype(np.uint8)
+        rgb = rgb[:,:,:3]
+        rgb = cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB)
+
+        projectionMatrix = np.asarray(proj_matrix).reshape([4,4],order='F')
+        viewMatrix = np.asarray(view_matrix).reshape([4,4],order='F')
+        tran_pix_world = np.linalg.inv(np.matmul(projectionMatrix, viewMatrix))
+
+        y, x = np.mgrid[-1:1:2 / height, -1:1:2 / width]
+        y *= -1.
+        x, y, z = x.reshape(-1), y.reshape(-1), depth.reshape(-1)
+        h = np.ones_like(z)
+
+        pixels = np.stack([x, y, z, h], axis=1)
+
+        colors = rgb[:,:,:3].reshape(height*width, 3)
+
+        # filter out "infinite" depths
+        idxs = z < 0.99
+        pixels = pixels[idxs]
+        colors = colors[idxs]
+        pixels[:, 2] = 2 * pixels[:, 2] - 1
+
+        # turn pixels to world coordinates
+        points = np.matmul(tran_pix_world, pixels.T).T
+        points /= points[:, 3: 4]
+        points = points[:, :3]
+
+        waypoints_proj = []
+        if waypoints is not None:
+            for point in waypoints:
+                x,y,z,w = np.matmul(np.matmul(projectionMatrix, viewMatrix), np.array([point[0], point[1], point[2], 1]))
+                x /= w
+                y /= w
+                x += 1
+                y += 1
+                x /= 2
+                y /= 2
+                x *= width
+                y *= height
+                y = height - y
+
+                px = [int(x), int(y)]
+                waypoints_proj.append(px)
+
+        z_low = np.where(points[:,2] > 0.002)
+        y_low = np.where(points[:,0] > -0.5)
+        y_high= np.where(points[:,0] < 0.2)
+
+        idxs_valid = np.intersect1d(z_low, y_high)
+        idxs_valid = np.intersect1d(idxs_valid, y_low)
+        points = points[idxs_valid]
+        colors = colors[idxs_valid]
+
+        return rgb, depth, points, colors, waypoints_proj
+
     def restore_state(self, state_id: int) -> None:
         """Restore a simulation state.
 
@@ -82,121 +184,7 @@ class PyBullet:
         """
         self.physics_client.removeState(state_id)
 
-    # 720 480
-    def render(
-        self,
-        mode: str = "human",
-        width: int = 480,
-        height: int = 480,
-        target_position: Optional[np.ndarray] = None,
-        distance: float = 1.4,
-        yaw: float = 45,
-        pitch: float = -30,
-        roll: float = 0,
-    ) -> Optional[np.ndarray]:
 
-        """Render.
-
-        If mode is "human", make the rendering real-time. All other arguments are
-        unused. If mode is "rgb_array", return an RGB array of the scene.
-
-        Args:
-            mode (str): "human" of "rgb_array". If "human", this method waits for the time necessary to have
-                a realistic temporal rendering and all other args are ignored. Else, return an RGB array.
-            width (int, optional): Image width. Defaults to 720.
-            height (int, optional): Image height. Defaults to 480.
-            target_position (np.ndarray, optional): Camera targetting this postion, as (x, y, z).
-                Defaults to [0., 0., 0.].
-            distance (float, optional): Distance of the camera. Defaults to 1.4.
-            yaw (float, optional): Yaw of the camera. Defaults to 45.
-            pitch (float, optional): Pitch of the camera. Defaults to -30.
-            roll (int, optional): Rool of the camera. Defaults to 0.
-
-        Returns:
-            RGB np.ndarray or None: An RGB array if mode is 'rgb_array', else None.
-        """
-        target_position = target_position if target_position is not None else np.zeros(3)
-        if mode == "human":
-            self.physics_client.configureDebugVisualizer(self.physics_client.COV_ENABLE_SINGLE_STEP_RENDERING)
-            time.sleep(self.dt)  # wait to seems like real speed
-        if mode == "rgb_array" or mode == "depth":
-            if self.connection_mode == p.DIRECT:
-                warnings.warn(
-                    "The use of the render method is not recommended when the environment "
-                    "has not been created with render=True. The rendering will probably be weird. "
-                    "Prefer making the environment with option `render=True`. For example: "
-                    "`env = gym.make('PandaReach-v3', render=True)`.",
-                    UserWarning,
-                )
-            view_matrix = self.physics_client.computeViewMatrixFromYawPitchRoll(
-                cameraTargetPosition=target_position,
-                distance=distance,
-                yaw=yaw,
-                pitch=pitch,
-                roll=roll,
-                upAxisIndex=2,
-            )
-
-            proj_matrix = self.physics_client.computeProjectionMatrixFOV(
-                fov=60, aspect=float(width) / height, nearVal=0.1, farVal=100.0
-            )
-
-            (_, _, px, depth, _) = self.physics_client.getCameraImage(
-                width=width,
-                height=height,
-                viewMatrix=view_matrix,
-                projectionMatrix=proj_matrix,
-                renderer=p.ER_BULLET_HARDWARE_OPENGL,
-            )
-
-            pmat = np.array(proj_matrix).reshape((4,4), order='C')
-            vmat = np.array(view_matrix).reshape((4,4), order='C')
-            fmat = pmat @ vmat.T
-            
-            #return px
-            depth = np.array(depth).reshape(height, width)
-            rgb = np.array(px).reshape((height, width, 4)).astype(np.uint8)
-
-            if mode == 'depth':
-                projectionMatrix = np.asarray(proj_matrix).reshape([4,4],order='F')
-                viewMatrix = np.asarray(view_matrix).reshape([4,4],order='F')
-                tran_pix_world = np.linalg.inv(np.matmul(projectionMatrix, viewMatrix))
-
-                y, x = np.mgrid[-1:1:2 / height, -1:1:2 / width]
-                y *= -1.
-                x, y, z = x.reshape(-1), y.reshape(-1), depth.reshape(-1)
-                h = np.ones_like(z)
-
-                pixels = np.stack([x, y, z, h], axis=1)
-
-                colors = rgb[:,:,:3].reshape(height*width, 3)
-
-                # filter out "infinite" depths
-                idxs = z < 0.99
-                #pixels = pixels[z < 0.99]
-                pixels = pixels[idxs]
-                colors = colors[idxs]
-                pixels[:, 2] = 2 * pixels[:, 2] - 1
-
-                # turn pixels to world coordinates
-                points = np.matmul(tran_pix_world, pixels.T).T
-                points /= points[:, 3: 4]
-                points = points[:, :3]
-
-                #z_low = np.where(points[:,2] > -0.1)
-                #z_low = np.where(points[:,2] > 0.0)
-                z_low = np.where(points[:,2] > 0.002)
-                y_low = np.where(points[:,0] > -0.5)
-                y_high= np.where(points[:,0] < 0.2)
-                idxs_valid = np.intersect1d(z_low, y_high)
-                idxs_valid = np.intersect1d(idxs_valid, y_low)
-                points = points[idxs_valid]
-                colors = colors[idxs_valid]
-            
-                return depth, points, colors
-
-            else:
-                return rgb, fmat
 
     def get_base_position(self, body: str) -> np.ndarray:
         """Get the position of the body.

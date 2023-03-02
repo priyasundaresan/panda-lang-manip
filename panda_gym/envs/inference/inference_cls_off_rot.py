@@ -25,7 +25,10 @@ class Inference:
         self.MODEL = importlib.import_module('model_cls_off_rot')
         self.classifier = self.MODEL.get_model(self.num_outputs, self.inp_dim, self.num_classes).cuda()
         #checkpoint = torch.load('/home/priya/iliad/panda-lang-manip/panda_gym/envs/inference/log_cls_off_rot/part_seg/2023-01-19_15-54/checkpoints/best_model.pth')
-        checkpoint = torch.load('/home/priya/iliad/panda-lang-manip/panda_gym/envs/inference/log_cls_off_rot/part_seg/2023-01-26_11-50/checkpoints/best_model.pth')
+        #checkpoint = torch.load('/home/priya/iliad/panda-lang-manip/panda_gym/envs/inference/log_cls_off_rot/part_seg/2023-01-26_11-50/checkpoints/best_model.pth')
+        #checkpoint = torch.load('/home/priya/iliad/panda-lang-manip/panda_gym/envs/inference/log/part_seg/2023-02-23_22-46/checkpoints/best_model.pth')
+        #checkpoint = torch.load('/home/priya/iliad/panda-lang-manip/panda_gym/envs/inference/log_cabinet_topleft/part_seg/2023-02-24_07-51/checkpoints/best_model.pth')
+        checkpoint = torch.load('/home/priya/iliad/panda-lang-manip/panda_gym/envs/inference/log_cabinet_topleft/part_seg/cabinet_bottom/checkpoints/best_model.pth')
         self.classifier.load_state_dict(checkpoint['model_state_dict'])
         self.classifier = self.classifier.eval()
         
