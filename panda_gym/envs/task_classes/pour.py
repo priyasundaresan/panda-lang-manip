@@ -143,15 +143,68 @@ class Pour:
         self.record(img, pcl_points, pcl_colors, waypoints, orientations, pixels, episode_idx, visualize=True)
         return waypoints, pixels
 
+    def pix2point_neighborhood(self, img, waypoint_proj, pixels_2d, points):
+        height, width, _ = img.shape
+        
+        img_masked = np.zeros((height,width)).astype(np.uint8)
+        cv2.circle(img_masked, tuple(waypoint_proj), 25, (255,255,255), -1)
+        img_masked_vis = np.repeat(img_masked[:, :, np.newaxis], 3, axis=2)
+        #cv2.imshow('img', np.hstack((img, img_masked_vis)))
+        #cv2.waitKey(0)
+        ys, xs = np.where(img_masked > 0)
+
+        masked_2d = np.vstack((xs, ys)).T.astype(np.uint8)
+        pixels_2d = pixels_2d.astype(np.uint8)
+
+        idxs = np.in1d(pixels_2d, masked_2d).reshape(pixels_2d.shape)
+        idxs = np.all(idxs, axis=1).squeeze()
+        idxs = np.where(idxs == True)[0]
+
+        return points[idxs], idxs
+
+    def point2point_neighborhood(self, source_points, target_points):
+        nbrs = NearestNeighbors(n_neighbors=100, algorithm='ball_tree').fit(source_points)
+        distances, idxs = nbrs.kneighbors(target_points)
+        #idxs_thresh = np.where(distances < 5e-4)[0] 
+        #return idxs[idxs_thresh]
+        return idxs
+
     def take_rgbd(self, waypoints):
         self.sim.place_visualizer(target_position=np.zeros(3), distance=0.9, yaw=45, pitch=-30)
-        img, depth, points, colors, waypoints_proj = self.robot.sim.render(distance=1.2, yaw=45, pitch=-30, waypoints=waypoints)
+        #img, depth, points, colors, pixels_2d, waypoints_proj = self.robot.sim.render(distance=1.2, yaw=45, pitch=-30, waypoints=waypoints)
+        img, depth, points, colors, pixels_2d, waypoints_proj = self.robot.sim.render(distance=0.8, yaw=90, pitch=-85, waypoints=waypoints)
 
-        _, _, points, colors, _ = self.robot.sim.render(distance=0.6, target_position=[0,0,0.1], yaw=90)
-        _, _, points1, colors1, _ = self.robot.sim.render(distance=0.6, target_position=[0,0,0.1], yaw=0)
-        points = np.vstack((points, points1))
-        colors = np.vstack((colors, colors1))
-        print(points.shape, colors.shape)
+        idxs = np.where(points[:,2] < 0.3)[0]
+        points = points[idxs]
+        colors = colors[idxs]
+        pixels_2d = pixels_2d[idxs]
+
+        H,W,_ = img.shape
+        points_start, idxs_start = self.pix2point_neighborhood(img, waypoints_proj[0], pixels_2d.copy(), points.copy())
+        points_end, idxs_end = self.pix2point_neighborhood(img, waypoints_proj[1], pixels_2d.copy(), points.copy())
+
+        colors_start = np.zeros_like(points_start)
+        colors_end = np.zeros_like(points_end)
+        colors_start[:,] = (255,0,0)
+        colors_end[:,] = (255,255,0)
+    
+        #print(idxs_start.shape, idxs_end.shape)
+        #idxs = np.concatenate((idxs_start, idxs_end))
+        #points = points[idxs]
+        #colors = colors[idxs]
+
+        _, _, points1, colors1, pixels1_2d, _ = self.robot.sim.render(distance=0.6, target_position=[0,0,0.1], yaw=0)
+        _, _, points2, colors2, pixels_2d, _ = self.robot.sim.render(distance=0.6, target_position=[0,0,0.1], yaw=90)
+
+        points = np.vstack((points1, points2))
+        colors = np.vstack((colors1, points2))
+
+        start_idxs = self.point2point_neighborhood(points, points_start)
+        end_idxs = self.point2point_neighborhood(points, points_end)
+        colors[start_idxs] = (0,0,255)
+        colors[end_idxs] = (0,255,255)
+
+        #print(points.shape, colors.shape)
         return img, points, colors, waypoints_proj
     
     def record(self, img, points, colors, waypoints, orientations, pixels, episode_idx, visualize=True):
@@ -205,15 +258,15 @@ class Pour:
     
             pcd.points = o3d.utility.Vector3dVector(points)
             #pcd.colors = o3d.utility.Vector3dVector(cls_vis/255.)
-            pcd.colors = o3d.utility.Vector3dVector(offsets_vis/255.)
+            #pcd.colors = o3d.utility.Vector3dVector(offsets_vis/255.)
+            pcd.colors = o3d.utility.Vector3dVector(colors/255.)
             o3d.visualization.draw_geometries([pcd])
 
             for pixel in pixels:
                 cv2.circle(img, tuple(pixel), 4, (255,0,0), -1)
             cv2.imwrite('images/%05d.jpg'%episode_idx, img)
-
-            cv2.imshow('img', img)
-            cv2.waitKey(0)
+            #cv2.imshow('img', img)
+            #cv2.waitKey(0)
     
 if __name__ == '__main__':
     sim = PyBullet(render=True, background_color=np.array([255,255,255]))

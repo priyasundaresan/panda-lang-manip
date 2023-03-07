@@ -135,10 +135,18 @@ class PyBullet:
         colors = colors[idxs]
         pixels[:, 2] = 2 * pixels[:, 2] - 1
 
+
         # turn pixels to world coordinates
         points = np.matmul(tran_pix_world, pixels.T).T
         points /= points[:, 3: 4]
         points = points[:, :3]
+
+        pixels_2d = pixels[:, :2]
+        pixels_2d += np.array([1., 1.])
+        pixels_2d /= 2
+        pixels_2d[:, 0] *= np.array([width for _ in range(len(pixels_2d))])
+        pixels_2d[:, 1] *= np.array([height for _ in range(len(pixels_2d))])
+        pixels_2d[:, 1] = np.array([height for _ in range(len(pixels_2d))]) - pixels_2d[:, 1]
 
         waypoints_proj = []
         if waypoints is not None:
@@ -166,7 +174,9 @@ class PyBullet:
         points = points[idxs_valid]
         colors = colors[idxs_valid]
 
-        return rgb, depth, points, colors, waypoints_proj
+        pixels_2d = pixels_2d[idxs_valid]
+
+        return rgb, depth, points, colors, pixels_2d, waypoints_proj
 
     def restore_state(self, state_id: int) -> None:
         """Restore a simulation state.

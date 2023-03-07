@@ -15,12 +15,12 @@ import open3d as o3d
 from scipy.spatial.transform import Rotation as R
 
 class Inference:
-    def __init__(self, ROOT_DIR='/home/priya/iliad/panda-lang-manip/panda_gym/envs/inference'):
+    def __init__(self, ROOT_DIR='/home/priya/iliad/panda-lang-manip/panda_gym/envs/inference', checkpoint_path='log_cabinet_topleft/part_seg/cabinet_bottom', inp_dim=6):
         sys.path.insert(0, ROOT_DIR)
         sys.path.append(os.path.join(ROOT_DIR, 'models'))
         os.environ["CUDA_VISIBLE_DEVICES"] = '0'
         self.num_outputs = 3 + 4
-        self.inp_dim = 6
+        self.inp_dim = inp_dim
         self.num_classes = 3
         self.MODEL = importlib.import_module('model_cls_off_rot')
         self.classifier = self.MODEL.get_model(self.num_outputs, self.inp_dim, self.num_classes).cuda()
@@ -28,7 +28,7 @@ class Inference:
         #checkpoint = torch.load('/home/priya/iliad/panda-lang-manip/panda_gym/envs/inference/log_cls_off_rot/part_seg/2023-01-26_11-50/checkpoints/best_model.pth')
         #checkpoint = torch.load('/home/priya/iliad/panda-lang-manip/panda_gym/envs/inference/log/part_seg/2023-02-23_22-46/checkpoints/best_model.pth')
         #checkpoint = torch.load('/home/priya/iliad/panda-lang-manip/panda_gym/envs/inference/log_cabinet_topleft/part_seg/2023-02-24_07-51/checkpoints/best_model.pth')
-        checkpoint = torch.load('/home/priya/iliad/panda-lang-manip/panda_gym/envs/inference/log_cabinet_topleft/part_seg/cabinet_bottom/checkpoints/best_model.pth')
+        checkpoint = torch.load('%s/%s/checkpoints/best_model.pth'%(ROOT_DIR, checkpoint_path))
         self.classifier.load_state_dict(checkpoint['model_state_dict'])
         self.classifier = self.classifier.eval()
         

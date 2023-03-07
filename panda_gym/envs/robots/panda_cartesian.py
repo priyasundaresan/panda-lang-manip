@@ -128,6 +128,13 @@ class Panda(PyBulletRobot):
             self.set_action(action, self.get_ee_orientation())
             self.sim.step()
 
+    #def grasp(self):
+    #    self.block_gripper = False
+    #    for i in range(5):
+    #        action = [0,0,0,0.2]
+    #        self.set_action(action, self.get_ee_orientation())
+    #        self.sim.step()
+
     def release(self):
         self.block_gripper = False
         #for i in range(100):
