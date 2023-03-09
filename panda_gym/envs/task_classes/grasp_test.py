@@ -28,9 +28,10 @@ class Manipulate:
     ) -> None:
         self.sim = sim
         self.robot = robot
-        self._create_scene()
+        #self._create_scene()
         self.sim.place_visualizer(target_position=np.zeros(3), distance=0.9, yaw=45, pitch=-30)
         self.inference_server = CGNInference()
+        self.body_id_mapping = {}
 
     def _create_scene(self) -> None:
         """Create the scene."""
@@ -38,22 +39,30 @@ class Manipulate:
         self.sim.create_table(length=1.1, width=0.7, height=0.4, x_offset=-0.3)
         self.reset_robot()
         location, ori = self.reset_sim()
+
+        if 'body' in self.body_id_mapping:
+            self.sim.physics_client.removeBody(self.body_id_mapping['body'])
+            self.sim._bodies_idx.pop('body')
         
-        fn = random.choice(os.listdir('assets'))
-        #fn = 'cracker_box'
-        #fn = 'plastic_banana'
-        #self.sim.loadURDF(body_name='body', fileName='assets/%s/model.urdf'%distractor_names, basePosition=location, baseOrientation=ori, globalScaling=0.9)
+        fn = random.choice(os.listdir('grasp_assets'))
+        print('loaded object', fn)
         success = False
         while not success:
             try:
-                self.sim.loadURDF(body_name='body', fileName='assets/%s/model.urdf'%fn, basePosition=location, baseOrientation=ori, globalScaling=0.8)
+                obj = self.sim.loadURDF(body_name='body', fileName='grasp_assets/%s/model.urdf'%fn, basePosition=location, baseOrientation=ori, globalScaling=1.0)
                 success = True
+                self.body_id_mapping['body'] = obj
             except:
                 success = False
 
+    def reset(self):
+        with self.sim.no_rendering():
+            self._create_scene()
+        for i in range(10):
+            self.sim.step()
+
     def reset_sim(self):
         loc = np.random.uniform([-0.2,-0.3,0.075], [0.0,0.1,0.075])
-        #loc = np.random.uniform([-0.1,-0.2,0.045], [0.0,0.2,0.045])
         ori = R.from_euler('xyz', [0,0,np.random.uniform(0,180)], degrees=True).as_quat()
         return loc, ori
 
@@ -98,12 +107,8 @@ class Manipulate:
         ctr = 0
 
         grasp_pos, (yaw,pitch,roll), approach_pos = self.inference_server.run_inference(points, colors)
-        print(yaw, pitch, roll)
-        if roll < -90:
-            print('here1', roll)
-            roll += 90
-        else:
-            print('here2', roll)
+        #yaw = pitch = 0
+        #print('ROLL', roll)
 
         offset = approach_pos - grasp_pos
         approach_pos = grasp_pos + 2*offset
@@ -129,7 +134,6 @@ class Manipulate:
         #        #cv2.imwrite('preds/%05d.jpg'%ctr, img)
         #        ctr += 1
 
-
         self.robot.move(grasp_pos, grasp_euler)
 
         #for i in range(500):
@@ -146,7 +150,7 @@ class Manipulate:
         #cv2.imwrite('preds/%05d.jpg'%ctr, img)
         ctr += 1
 
-        self.robot.move(lift_pos, reset_euler)
+        self.robot.move(lift_pos, grasp_euler)
 
         #for i in range(100):
         for i in range(10):
@@ -165,4 +169,8 @@ if __name__ == '__main__':
 
     if not os.path.exists('preds'):
         os.mkdir('preds')
-    task.execute()
+
+    #task.execute()
+    for i in range(10):
+        task.reset()
+        task.execute()

@@ -106,6 +106,7 @@ class Panda(PyBulletRobot):
         if distance < 0.03:
             gen_ori_fn = self.get_ori(start_euler, goal_euler, 20)
             gen_fn, num_steps = self.get_waypoint(start_pos, goal_pos, 0.015, num_steps=20)
+            #gen_fn, num_steps = self.get_waypoint(start_pos, goal_pos, 0.01, num_steps=20)
 
         else:
             #gen_fn, num_steps = self.get_waypoint(start_pos, goal_pos, 0.01)
