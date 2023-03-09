@@ -114,7 +114,6 @@ class PyBullet:
         depth = np.array(depth).reshape(height, width)
         rgb = np.array(px).reshape((height, width, 4)).astype(np.uint8)
         rgb = rgb[:,:,:3]
-        rgb = cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB)
 
         projectionMatrix = np.asarray(proj_matrix).reshape([4,4],order='F')
         viewMatrix = np.asarray(view_matrix).reshape([4,4],order='F')
@@ -128,6 +127,7 @@ class PyBullet:
         pixels = np.stack([x, y, z, h], axis=1)
 
         colors = rgb[:,:,:3].reshape(height*width, 3)
+        rgb = cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB)
 
         # filter out "infinite" depths
         idxs = z < 0.99
@@ -165,7 +165,8 @@ class PyBullet:
                 px = [int(x), int(y)]
                 waypoints_proj.append(px)
 
-        z_low = np.where(points[:,2] > 0.002)
+        #z_low = np.where(points[:,2] > 0.002)
+        z_low = np.where(points[:,2] > 0.0)
         y_low = np.where(points[:,0] > -0.5)
         y_high= np.where(points[:,0] < 0.2)
 

@@ -213,6 +213,27 @@ def interp(p1, p2):
     #print(points.shape, p1.shape)
     return points
 
+def normalize_vec(vec):
+    return vec/np.linalg.norm(vec)
+
+def angle_between_vecs(vec1, vec2):
+    v1,v2 = vec1
+    w1,w2 = vec2
+    return np.rad2deg(np.arctan2(w2*v1 - w1*v2, w1*v1 + w2*v2))
+
+def get_yaw_pitch(pt0, pt1, pt2):
+    off1 = pt1 - pt0
+    off2 = pt2 - pt0
+
+    off1_2d_yaw = normalize_vec(off1[:2])
+    off2_2d_yaw = normalize_vec(off2[:2])
+    yaw = angle_between_vecs(off1_2d_yaw, off2_2d_yaw)
+
+    off1_2d_pitch = normalize_vec(off1[1:])
+    off2_2d_pitch = normalize_vec(off2[1:])
+    pitch = -1 * angle_between_vecs(off1_2d_pitch, off2_2d_pitch)
+    return yaw, pitch
+
 def get_grasps(grasps, cam_pose, gripper_openings):
     gripper = mesh_utils.create_gripper('panda')
     gripper_control_points = gripper.get_control_point_tensor(1, False, convex_hull=False).squeeze()
@@ -221,6 +242,7 @@ def get_grasps(grasps, cam_pose, gripper_openings):
                                 gripper_control_points[1], gripper_control_points[2], gripper_control_points[4]])
 
     grasp_centers = []
+    grasp_approaches = []
     gripper_pts = []
     grasp_rots = []
     for i,(g,g_opening) in enumerate(zip(grasps, gripper_openings)):
@@ -239,6 +261,7 @@ def get_grasps(grasps, cam_pose, gripper_openings):
         points = interp(pts[4], pts[5]) # center across
         #points = np.vstack((points, interp(grasp_center - [0.04,0,0], grasp_center + [0.04,0,0]))) 
 
+        # Get roll
         across_vec = [1,0]
         parallel_grasp_vec = (pts[4] - grasp_center)[:-1]
         parallel_grasp_vec /= np.linalg.norm(parallel_grasp_vec)
@@ -247,45 +270,27 @@ def get_grasps(grasps, cam_pose, gripper_openings):
         w1,w2 = parallel_grasp_vec
         roll = np.rad2deg(np.arctan2(w2*v1 - w1*v2, w1*v1 + w2*v2))
 
+        # Get yaw and pitch
         top_offset = np.array([0,-0.0584,0])
-
         points = np.vstack((points, interp(pts[1], pts[0]))) # top
         #points = np.vstack((points, interp(pts[1], pts[1] + top_offset))) # top canonical
 
-        up_vec = top_offset/np.linalg.norm(top_offset)
-        approach_vec = (pts[0] - top_offset)
-        approach_vec /= np.linalg.norm(approach_vec)
+        pt0 = pts[1]
+        pt1 = pts[1] + top_offset
+        pt2 = pts[0]
+        yaw, pitch = get_yaw_pitch(pt0, pt1, pt2)
 
-        v1,v2 = up_vec[:-1]
-        w1,w2 = approach_vec[:-1]
-        yaw = np.rad2deg(np.arctan2(w2*v1 - w1*v2, w1*v1 + w2*v2))
-
-        v1,v2 = up_vec[1:]
-        w1,w2 = approach_vec[1:]
-        pitch = np.rad2deg(np.arctan2(w2*v1 - w1*v2, w1*v1 + w2*v2))
-        
         points = np.vstack((points, interp(pts[2], pts[3]))) # finger left
         points = np.vstack((points, interp(pts[5], pts[6]))) # finger right
 
+        fingertips_center = np.mean([pts[3], pts[6]], axis=0)
 
-        #points = np.vstack((points, interp(pts[3], pts[6]))) # finger right
-        grasp_center = np.mean([pts[3], pts[6]], axis=0)
         gripper_pts.append(points.tolist())
-        grasp_centers.append(grasp_center)
-        #if yaw < 0:
-        # yaw += 90
-        #if pitch < 0:
-        # pitch += 90
-        #grasp_rots.append([yaw, pitch, roll])
-
-        #print(yaw, pitch, roll, R.from_matrix(g[:3,:3]).as_euler('xyz', degrees=True))
-
-        yaw, pitch, roll = R.from_matrix(g[:3,:3]).as_euler('xyz', degrees=True)
+        grasp_centers.append(fingertips_center)
+        grasp_approaches.append(grasp_center)
         grasp_rots.append([yaw, pitch, roll])
 
-        #print('\n', yaw,pitch,roll)
-
-    return grasp_centers, grasp_rots, gripper_pts
+    return grasp_centers, grasp_rots, grasp_approaches, gripper_pts
     
 
 def visualize_grasps(full_pc, pred_grasps_cam, scores, plot_opencv_cam=False, pc_colors=None, gripper_openings=None, gripper_width=0.08):
@@ -297,19 +302,24 @@ def visualize_grasps(full_pc, pred_grasps_cam, scores, plot_opencv_cam=False, pc
     cm2 = plt.get_cmap('RdYlGn')
 
     gripper_openings_k = np.ones(len(pred_grasps_cam[-1]))*gripper_width if gripper_openings is None else gripper_openings[-1]
-    centers_k, rots_k, all_gripper_pts = get_grasps(pred_grasps_cam[-1], np.eye(4), gripper_openings=gripper_openings_k)    
+    centers_k, rots_k, approaches_k, all_gripper_pts = get_grasps(pred_grasps_cam[-1], np.eye(4), gripper_openings=gripper_openings_k)    
     scores = scores[-1]
 
     best_idx = np.argmax(scores)
 
     for i in range(len(centers_k)):
+        #if i == best_idx:
         grasp_centers.append(centers_k[i])
         gripper_pts += all_gripper_pts[i]
         color = cm2(scores[i])[:3]
+        if i == best_idx:
+            color = [0, 1.0, 0]
         grasp_colors.append(color)
         gripper_colors += [color for _ in range(len(all_gripper_pts[i]))]
 
+    rot = R.from_euler('xyz',[200,0,0], degrees=True)
     points = np.vstack((full_pc, gripper_pts))
+    points = (rot.as_matrix()@points.T).T
     pc_colors = pc_colors/255.
     colors = np.vstack((pc_colors, gripper_colors))
 
@@ -318,4 +328,4 @@ def visualize_grasps(full_pc, pred_grasps_cam, scores, plot_opencv_cam=False, pc
     pcd.colors = o3d.utility.Vector3dVector(colors)
     o3d.visualization.draw_geometries([pcd])
 
-    return centers_k[best_idx], rots_k[best_idx]
+    return centers_k[best_idx], rots_k[best_idx], approaches_k[best_idx]

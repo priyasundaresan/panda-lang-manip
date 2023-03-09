@@ -50,6 +50,7 @@ class CGNInference:
 
         pred_grasps_cam, scores, contact_pts, _ = self.grasp_estimator.predict_scene_grasps(self.sess, pc_full, pc_segments=None, 
                                                                                           local_regions=None, filter_grasps=False, forward_passes=1)  
-        grasp_point, grasp_rot = visualize_grasps(pc_full, pred_grasps_cam, scores, plot_opencv_cam=True, pc_colors=pc_colors)
+        grasp_point, grasp_rot, approach_point = visualize_grasps(pc_full, pred_grasps_cam, scores, plot_opencv_cam=True, pc_colors=pc_colors)
         grasp_point = rot.inv().as_matrix()@grasp_point
-        return grasp_point, grasp_rot
+        approach_point = rot.inv().as_matrix()@approach_point
+        return grasp_point, grasp_rot, approach_point
