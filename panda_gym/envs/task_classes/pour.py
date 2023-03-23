@@ -109,7 +109,8 @@ class Pour:
 
         approach_pos = pos + np.array([0,0,0.15])
         grasp_pos = pos - np.array([0,0,0.045])
-        pour_pos = final_pos + np.array([0,alpha*(-0.05),0.15])
+        #pour_pos = final_pos + np.array([0,alpha*(-0.05),0.15])
+        pour_pos = final_pos + np.array([0,alpha*(-0.05),0.10])
         grasp_euler = np.array([180,alpha*(-35),90])
         pour_euler = np.array([180,alpha*85,90])
 
@@ -124,23 +125,24 @@ class Pour:
 
         #pixels = self.project_waypoints(waypoints, fmat)
 
-        ### Grasp cup
-        #self.robot.move(approach_pos, grasp_euler)
-        #self.robot.move(grasp_pos, grasp_euler)
-        #self.robot.grasp()
+        ## Grasp cup
+        self.robot.move(approach_pos, grasp_euler)
+        self.robot.move(grasp_pos, grasp_euler)
+        self.robot.grasp()
 
-        ### Lift
-        #self.robot.move(approach_pos, grasp_euler)
+        ## Lift
+        self.robot.move(approach_pos, grasp_euler)
 
-        ### Pour into other cup
-        #self.robot.move(pour_pos, grasp_euler)
-        #self.robot.move(pour_pos, pour_euler)
+        ## Pour into other cup
+        self.robot.move(pour_pos, grasp_euler)
+        self.robot.move(pour_pos, pour_euler)
 
-        ### Wait for pour to be done
-        #for i in range(50):
-        #    self.sim.step()
+        ## Wait for pour to be done
+        for i in range(50):
+            self.sim.step()
 
-        self.record(img, pcl_points, pcl_colors, waypoints, orientations, pixels, episode_idx, visualize=True)
+        #self.record(img, pcl_points, pcl_colors, waypoints, orientations, pixels, episode_idx, visualize=True)
+        self.record(img, pcl_points, pcl_colors, waypoints, orientations, pixels, episode_idx, visualize=False)
         return waypoints, pixels
 
     def pix2point_neighborhood(self, img, waypoint_proj, pixels_2d, points):

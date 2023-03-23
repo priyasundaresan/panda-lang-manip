@@ -49,7 +49,7 @@ class Manipulate:
         success = False
         while not success:
             try:
-                obj = self.sim.loadURDF(body_name='body', fileName='grasp_assets/%s/model.urdf'%fn, basePosition=location, baseOrientation=ori, globalScaling=1.0)
+                obj = self.sim.loadURDF(body_name='body', fileName='grasp_assets/%s/model.urdf'%fn, basePosition=location, baseOrientation=ori, globalScaling=0.8)
                 success = True
                 self.body_id_mapping['body'] = obj
             except:
