@@ -45,10 +45,10 @@ class get_model(nn.Module):
         cls = F.log_softmax(cls, dim=1) # comment out
         cls = cls.permute(0, 2, 1)
 
-        off = x[:,self.num_classes:self.num_classes+3,:]
+        off = x[:,self.num_classes:self.num_classes+3*2,:]
         off = off.permute(0, 2, 1)
 
-        rot = x[:,self.num_classes+3:,:]
+        rot = x[:,self.num_classes+3*2:,:]
         rot = rot.permute(0, 2, 1)
 
         return cls, off, rot

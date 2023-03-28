@@ -44,12 +44,12 @@ class Manipulate:
             self.sim.physics_client.removeBody(self.body_id_mapping['body'])
             self.sim._bodies_idx.pop('body')
         
-        fn = random.choice(os.listdir('grasp_assets'))
+        fn = random.choice(os.listdir('grasping_assets'))
         print('loaded object', fn)
         success = False
         while not success:
             try:
-                obj = self.sim.loadURDF(body_name='body', fileName='grasp_assets/%s/model.urdf'%fn, basePosition=location, baseOrientation=ori, globalScaling=0.8)
+                obj = self.sim.loadURDF(body_name='body', fileName='grasping_assets/%s/model.urdf'%fn, basePosition=location, baseOrientation=ori, globalScaling=0.8)
                 success = True
                 self.body_id_mapping['body'] = obj
             except:

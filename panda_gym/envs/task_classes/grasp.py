@@ -1,10 +1,11 @@
 from typing import Any, Dict
-import cv2
-import os
+import random
 import time
+import os
 import open3d as o3d
 
 import numpy as np
+import cv2
 
 from panda_gym.envs.core import Task
 from panda_gym.pybullet import PyBullet
@@ -17,180 +18,225 @@ from panda_gym.envs.robots.panda_cartesian import Panda
 from scipy.spatial.transform import Slerp
 from scipy.spatial.transform import Rotation as R
 
-class Manipulate(Task):
+from panda_gym.envs.contact_graspnet.contact_graspnet.grasp_inference import CGNInference
+from panda_gym.envs.inference.inference_kpt import KptInference
+
+from sklearn.neighbors import NearestNeighbors
+
+class Manipulate:
     def __init__(
         self,
         sim: PyBullet,
-        goal_xy_range: float = 0.3,
-        goal_z_range: float = 0.2,
-        obj_xy_range: float = 0.3,
+        robot,
     ) -> None:
-        super().__init__(sim)
-        self.object_size = 0.04
-        self.goal_range_low = np.array([-goal_xy_range / 2, -goal_xy_range / 2, 0])
-        self.goal_range_high = np.array([goal_xy_range / 2, goal_xy_range / 2, goal_z_range])
-        self.obj_range_low = np.array([-obj_xy_range / 2, -obj_xy_range / 2, 0])
-        self.obj_range_high = np.array([obj_xy_range / 2, obj_xy_range / 2, 0])
-        with self.sim.no_rendering():
-            self._create_scene()
-            self.sim.place_visualizer(target_position=np.zeros(3), distance=0.9, yaw=45, pitch=-30)
+        self.sim = sim
+        self.robot = robot
+        #self._create_scene()
+        self.sim.place_visualizer(target_position=np.zeros(3), distance=0.9, yaw=45, pitch=-30)
+        self.inference_server = CGNInference()
+        self.kpt_inference_server = KptInference(checkpoint_start='checkpoint_grasp/model.pth')
+        self.body_id_mapping = {}
 
     def _create_scene(self) -> None:
         """Create the scene."""
+        #num_objs = np.random.randint(3,6)
+        num_objs = 1
+
+        grasping_locs = self.reset_sim(num_objs)
+
         self.sim.create_plane(z_offset=-0.4)
         self.sim.create_table(length=1.1, width=0.7, height=0.4, x_offset=-0.3)
-        self.sim.create_box(
-            body_name="object",
-            half_extents=np.ones(3) * self.object_size / 2,
-            mass=1.0,
-            position=np.array([0.0, 0.0, self.object_size / 2]),
-            rgba_color=np.array([0.1, 0.9, 0.1, 1.0]),
-        )
-        self.sim.create_box(
-            body_name="target",
-            half_extents=np.ones(3) * self.object_size / 2,
-            mass=0.0,
-            ghost=True,
-            position=np.array([0.0, 0.0, 0.05]),
-            rgba_color=np.array([0.1, 0.9, 0.1, 0.3]),
-        )
 
-    def get_obs(self) -> np.ndarray:
-        # position, rotation of the object
-        object_position = self.sim.get_base_position("object")
-        object_rotation = self.sim.get_base_rotation("object")
-        object_velocity = self.sim.get_base_velocity("object")
-        object_angular_velocity = self.sim.get_base_angular_velocity("object")
-        observation = np.concatenate([object_position, object_rotation, object_velocity, object_angular_velocity])
-        return observation
+        # Delete graspable objects
+        for k in self.body_id_mapping:
+            if 'body' in k:
+                self.sim.physics_client.removeBody(self.body_id_mapping[k])
+                try:
+                    self.sim._bodies_idx.pop(k)
+                except:
+                    continue
 
-    def get_achieved_goal(self) -> np.ndarray:
-        object_position = np.array(self.sim.get_base_position("object"))
-        return object_position
+        # Put graspable objects in scene
+        self.graspable_obj_names = []
+        self.graspable_objs = []
+        for i in range(len(grasping_locs)):
+            fn = random.choice(os.listdir('grasping_assets'))
+            #fn = random.choice(os.listdir('grasp_assets'))
+            self.graspable_obj_names.append(fn)
+                
+            ori = R.from_euler('xyz', [0,0,np.random.uniform(0,180)], degrees=True).as_quat()
+            obj = self.sim.loadURDF(body_name='body%d'%i, fileName='grasping_assets/%s/model.urdf'%fn, basePosition=grasping_locs[i], baseOrientation=ori, globalScaling=0.85)
+            #obj = self.sim.loadURDF(body_name='body%d'%i, fileName='grasp_assets/%s/model.urdf'%fn, basePosition=grasping_locs[i], baseOrientation=ori, globalScaling=0.85)
+            self.sim.physics_client.changeDynamics(obj, -1, mass=5)
 
-    def reset(self) -> None:
-        self.goal = self._sample_goal()
-        object_position = self._sample_object()
-        self.object_position = object_position
-        #self.sim.set_base_pose("target", self.goal, np.array([0.0, 0.0, 0.0, 1.0]))
-        self.sim.set_base_pose("target", self.goal, object_position)
-        self.sim.set_base_pose("object", object_position, np.array([0.0, 0.0, 0.0, 1.0]))
-        return object_position
+            self.graspable_objs.append('body%d'%i)
+            self.body_id_mapping['body%d'%i] = obj
+        self.graspable_obj_names = self.filter_names(self.graspable_obj_names)
 
-    def _sample_goal(self) -> np.ndarray:
-        """Sample a goal."""
-        goal = np.array([0.0, 0.0, self.object_size / 2])  # z offset for the cube center
-        noise = np.random.uniform(self.goal_range_low, self.goal_range_high)
-        if np.random.random() < 0.3:
-            noise[2] = 0.0
-        goal += noise
-        return goal
+    def reset(self):
+        with self.sim.no_rendering():
+            self._create_scene()
+        for i in range(10):
+            self.sim.step()
 
-    def _sample_object(self) -> np.ndarray:
-        """Randomize start position of object."""
-        object_position = np.array([0.0, 0.0, self.object_size / 2])
-        noise = np.random.uniform(self.obj_range_low, self.obj_range_high)
-        object_position += noise
-        return object_position
 
-    def is_success(self, achieved_goal: np.ndarray, desired_goal: np.ndarray) -> np.ndarray:
+    def filter_names(self, fns):
+        filtered_names = []
+        for fn in fns:
+            words = fn.split('_')
+            if len(words) == 1:
+                filtered_names.append(words[0])
+            else:
+                if words[-1].isdigit():
+                    words = words[:-1]
+                if words[0] in ['plastic']:
+                    words = words[1:]
+                filtered_names.append(' '.join(words))
+        return filtered_names
+
+    def dist(self, new_point, points, r_threshold):
+        for point in points:
+            dist = np.sqrt(np.sum(np.square(new_point-point)))
+            if dist < r_threshold:
+                return False
         return True
-
-    def compute_reward(self, achieved_goal, desired_goal, info: Dict[str, Any]) -> np.ndarray:
-        return 0
-
-    def record(self, robot):
-        img, fmat = robot.sim.render(mode='rgb_array', distance=1.2)
-        #img, fmat = robot.sim.render(mode='rgb_array', distance=0.5, yaw=270)
-        H,W,C = img.shape
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-        position = robot.get_ee_position()
-        #position = self.goal
-        print('POS', position)
-        pixel = (fmat @ np.hstack((position, [1])))
-        print(pixel)
-        
-        x,y,z,w = pixel
-        #x /= w
-        #y /= w
-        print(x,y)
-        x += 1
-        y += 1
-        print(x,y)
-        x /= 2
-        y /= 2
-        print(x,y)
-        #print(x,y)
-
-        x *= 480
-        y *= 480
-        y = 480 - y
     
-        pixel = (int(x), int(y))
+    def RandX(self,N, r_threshold):
+        points = []
+        while len(points) < N:
+            new_point = np.random.uniform([-0.1,-0.1,0.075], [0.0,0.1,0.075])
+            if self.dist(new_point, points, r_threshold):
+                points.append(new_point)
+        return points
 
-        #pixel = (fmat @ np.hstack((position, [1])))[:3]*np.array([480, 480, 0]) + np.array([240, 240, 0])
-        #pixel = pixel[:-1].astype(int)
-        #pixel[1] = 480 - pixel[1]
-        #print(pixel)
+    def reset_sim(self, num_locs=3):
+        filtered_points = self.RandX(num_locs, 0.075)
+        return filtered_points
 
-        cv2.circle(img, tuple(pixel), 4, (255,255,0), -1)
-        cv2.imshow('img', img)
-        cv2.waitKey(0)
+    def reset_robot(self):
+        self.robot.reset()
+        goal_euler_xyz = np.array([180,0,0]) # standard
+        self.robot.move(np.array([0,0,0.6]), goal_euler_xyz)
+        self.robot.release()
 
-def visualize(img, points, colors):
-    pcd = o3d.geometry.PointCloud()
+    def take_rgbd(self):
+        self.sim.place_visualizer(target_position=np.zeros(3), distance=0.9, yaw=45, pitch=-30)
+        _, _, cam2world = self.sim.get_cam2world_transforms(target_position=np.zeros(3), distance=0.4, yaw=90, pitch=-45)
+        img, depth, points, colors, pixels_2d, waypoints_proj = self.sim.render(target_position=np.zeros(3), distance=0.4, yaw=90, pitch=-45)
 
-    rot = R.from_euler('yz', [90,90], degrees=True).as_matrix()
-    rot = R.from_euler('y', 180, degrees=True).as_matrix()@rot
-    points = (rot@points.T).T
+        #img, depth, points, colors, pixels_2d, _ = self.robot.sim.render(distance=1.2, yaw=45, pitch=-30)
 
-    pcd.points = o3d.utility.Vector3dVector(points)
-    pcd.colors = o3d.utility.Vector3dVector(colors/255.)
-    o3d.visualization.draw_geometries([pcd])
+        _, _, points1, colors1, pixels1_2d, _ = self.robot.sim.render(distance=0.6, target_position=[0,0,0.1], yaw=0)
+        _, _, points2, colors2, pixels_2d, _ = self.robot.sim.render(distance=0.6, target_position=[0,0,0.1], yaw=135)
+        _, _, points3, colors3, pixels_2d, _ = self.robot.sim.render(distance=0.6, target_position=[0,0,0.1], yaw=245)
+        _, _, points4, colors4, pixels_2d, _ = self.robot.sim.render(distance=0.6, target_position=[0,0,0.1], yaw=300)
 
-    img = cv2.normalize(img, None, 0, 1.0, cv2.NORM_MINMAX, dtype=cv2.CV_32F)
-    img = (img*255).astype(np.uint8)
-    cv2.imwrite('images/%05d_depth.jpg'%0, img)
+        points = np.vstack((points1, points2, points3, points4))
+        colors = np.vstack((colors1, colors2, colors3, colors4))
 
-    img, _ = robot.sim.render(mode='rgb_array', distance=0.6, target_position=[0,0,0.1], yaw=90)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    cv2.imwrite('images/%05d_rgb.jpg'%0, img)
+        return img, points, colors, depth, cam2world
+
+
+    def visualize(self, points, colors):
+        pcd = o3d.geometry.PointCloud()
+    
+        rot = R.from_euler('yz', [90,90], degrees=True).as_matrix()
+        rot = R.from_euler('y', 180, degrees=True).as_matrix()@rot
+        points = (rot@points.T).T
+    
+        pcd.points = o3d.utility.Vector3dVector(points)
+        pcd.colors = o3d.utility.Vector3dVector(colors/255.)
+        o3d.visualization.draw_geometries([pcd])
+
+    def deproject(self, pixel, depth, cam2world):
+        point = self.sim.deproject(depth, np.array(pixel).reshape(-1,2), cam2world)
+        return point
+
+    def execute(self):
+        self.reset_robot()
+        img, points, colors, depth, cam2world = self.take_rgbd()
+
+        prompt = 'Pick up the %s by the '%(self.graspable_obj_names[0])
+        prompt += input(prompt + '____?')
+        semantic_waypoint_proj = self.kpt_inference_server.run_inference(img, prompt)
+    
+        semantic_waypoint  = self.deproject(semantic_waypoint_proj, depth, cam2world)[0]
+
+        x_low = semantic_waypoint[0] - 0.125
+        x_high = semantic_waypoint[0] + 0.125
+        y_low = semantic_waypoint[1] - 0.125
+        y_high = semantic_waypoint[1] + 0.125
+
+        idxs = np.where(points[:,0] > x_low)[0]
+        points = points[idxs]
+        colors = colors[idxs]
+        idxs = np.where(points[:,0] < x_high)[0]
+        points = points[idxs]
+        colors = colors[idxs]
+        idxs = np.where(points[:,1] > y_low)[0]
+        points = points[idxs]
+        colors = colors[idxs]
+        idxs = np.where(points[:,1] < y_high)[0]
+        points = points[idxs]
+        colors = colors[idxs]
+
+        #self.visualize(points, colors)
+
+        grasp_positions, angles, approaches, best_idx = self.inference_server.run_inference(points, colors)
+
+        nbrs = NearestNeighbors(n_neighbors=1).fit(grasp_positions)
+        dists, idxs  = nbrs.kneighbors(semantic_waypoint.reshape(1,-1), return_distance=True)
+        best_idx = idxs[0][0]
+        #print(dists, idxs, best_idx)
+        #print(start_waypoint, grasp_positions)
+        
+        grasp_pos = grasp_positions[best_idx]
+        (yaw,pitch,roll) = angles[best_idx]
+        approach_pos = approaches[best_idx]
+
+        offset = approach_pos - grasp_pos
+        approach_pos = grasp_pos + 2*offset
+        grasp_pos -= 0.5*offset
+
+        lift_pos = grasp_pos + np.array([0,0,0.15])
+
+        reset_euler = np.array([180.,0.,0.]) # standard
+
+        grasp_euler = reset_euler + [yaw,pitch,roll]
+
+        self.robot.move(approach_pos, grasp_euler)
+        for i in range(100):
+            self.sim.step()
+
+        self.robot.move(grasp_pos, grasp_euler)
+
+        for i in range(100):
+            self.sim.step()
+
+        self.robot.grasp()
+
+        for i in range(100):
+            self.sim.step()
+
+        self.robot.move(lift_pos, grasp_euler)
+
+        for i in range(200):
+            self.sim.step()
 
 if __name__ == '__main__':
     if not os.path.exists('images'):
         os.mkdir('images')
-
-    sim = PyBullet(render=True)
+    sim = PyBullet(render=True, background_color=np.array([255,255,255]))
     robot = Panda(sim, block_gripper=False, base_position=np.array([-0.6, 0.0, 0.0]), control_type="ee")
-    task = Manipulate(sim)
-    robot.reset()
-    thresh = 5e-3
+    task = Manipulate(sim, robot)
 
-    pos = task.reset()
+    if not os.path.exists('preds'):
+        os.mkdir('preds')
 
-    goal_euler_xyz = np.array([180,0,0]) # standard
-    robot.reset()
-    robot.move(np.array([0,0,0.6]), goal_euler_xyz)
-    robot.release()
-
-    #robot.move(pos, goal_euler_xyz)
-    #robot.grasp()
-    #robot.move(pos + np.array([0,0,0.15]), goal_euler_xyz)
-
-    #for i in range(100):
-    #    robot.sim.step()
-
-    task.record(robot)
-
-    img, points, colors = robot.sim.render(mode='depth', distance=0.6, target_position=[0,0,0.1], yaw=90)
-
-    #pcd = o3d.geometry.PointCloud()
-    #rot = R.from_euler('yz', [90,90], degrees=True).as_matrix()
-    #rot = R.from_euler('y', 180, degrees=True).as_matrix()@rot
-    #points = (rot@points.T).T
-
-    data = {'xyz':points, 'xyz_color':colors}
-    np.save('0.npy', data)
-
-    visualize(img, points, colors)
+    #task.execute()
+    for i in range(10):
+        task.reset()
+        try:
+            task.execute()
+        except:
+            continue

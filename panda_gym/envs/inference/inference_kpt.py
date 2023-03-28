@@ -13,7 +13,7 @@ from panda_gym.envs.inference.models.model_clip import CLIPLingUNet
 from torchvision import transforms
 
 class KptInference:
-    def __init__(self, ROOT_DIR='/home/priya/iliad/panda-lang-manip/panda_gym/envs/inference'):
+    def __init__(self, checkpoint_start='checkpoint_start/model.pth', checkpoint_end='checkpoint_end/model.pth', ROOT_DIR='/home/priya/iliad/panda-lang-manip/panda_gym/envs/inference'):
         sys.path.insert(0, ROOT_DIR)
         sys.path.append(os.path.join(ROOT_DIR, 'models'))
         os.environ["CUDA_VISIBLE_DEVICES"] = '0'
@@ -21,11 +21,11 @@ class KptInference:
         self.img_dim = 480
         self.start_model = CLIPLingUNet((self.img_dim, self.img_dim, 3), 1, cfg, 'cuda:0', None)
         self.end_model = CLIPLingUNet((self.img_dim, self.img_dim, 4), 1, cfg, 'cuda:0', None)
-        
-        start_checkpoint_path = '%s/%s'%(ROOT_DIR, 'checkpoint_start/model.pth')
-        self.start_model.load_state_dict(torch.load(start_checkpoint_path))
 
-        end_checkpoint_path = '%s/%s'%(ROOT_DIR, 'checkpoint_end/model.pth')
+        start_checkpoint_path = '%s/%s'%(ROOT_DIR, checkpoint_start)
+        self.start_model.load_state_dict(torch.load(start_checkpoint_path))
+        
+        end_checkpoint_path = '%s/%s'%(ROOT_DIR, checkpoint_end)
         self.end_model.load_state_dict(torch.load(end_checkpoint_path))
 
         use_cuda = torch.cuda.is_available()
@@ -53,17 +53,20 @@ class KptInference:
         return G.double()
 
     def run_inference(self, img_np, text, kpt=None):
-        img_t = self.transform(img_np).unsqueeze(0)
+        img_t = self.transform(img_np)
         if kpt is not None:
-            U = kpt[:,0]
-            V = kpt[:,1]
-            gaussians = gauss_2d_batch(self.img_dim, self.img_dim, 6, U, V)
+            kpt = np.reshape(kpt, (-1,2))
+            U = torch.from_numpy(kpt[:,0]).cuda()
+            V = torch.from_numpy(kpt[:,1]).cuda()
+            gaussians = self.gauss_2d_batch(self.img_dim, self.img_dim, 6, U, V)
             start_gauss = gaussians[0].unsqueeze(0)
             img_t = torch.vstack((img_t.cuda(), start_gauss))
+        img_t = img_t.unsqueeze(0).float()
 
         if kpt is None:
             heatmap = self.start_model(img_t.cuda(), text)
         else:
+            print(img_t.shape)
             heatmap = self.end_model(img_t.cuda(), text)
 
         heatmap = heatmap.detach().cpu().numpy()[0]

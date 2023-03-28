@@ -64,7 +64,7 @@ class TableTop:
         self.sim = sim
         self.sim.place_visualizer(target_position=np.zeros(3), distance=0.9, yaw=45, pitch=-30)
         self.body_id_mapping = {}
-        self.primitive_inference_server = Inference(checkpoint_path='log_pour_open_close/part_seg/2023-03-17_00-05', inp_dim=7)
+        self.primitive_inference_server = Inference(checkpoint_path='checkpoints_prim/log_pour/part_seg/2023-03-26_18-08', inp_dim=7)
         self.kpt_inference_server = KptInference()
         self.pixel_selector = PixelSelector()
 

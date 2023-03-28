@@ -136,11 +136,11 @@ class Panda(PyBulletRobot):
     #        self.set_action(action, self.get_ee_orientation())
     #        self.sim.step()
 
-    def release(self):
+    def release(self, width=1):
         self.block_gripper = False
         #for i in range(100):
         for i in range(30):
-            action = [0,0,0,1]
+            action = [0,0,0,width]
             self.set_action(action, self.get_ee_orientation())
             self.sim.step()
 

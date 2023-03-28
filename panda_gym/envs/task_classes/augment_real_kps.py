@@ -62,7 +62,8 @@ if __name__ == '__main__':
 
     orig_len = len(os.listdir(img_dir))
     idx = orig_len
-    num_augs_per_img = 8
+    #num_augs_per_img = 8
+    num_augs_per_img = 6
     for i in range(orig_len):
         print(i, orig_len)
         img = cv2.imread(os.path.join(img_dir, '%05d.jpg'%i))

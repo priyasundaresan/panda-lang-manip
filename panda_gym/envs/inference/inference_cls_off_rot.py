@@ -19,16 +19,12 @@ class Inference:
         sys.path.insert(0, ROOT_DIR)
         sys.path.append(os.path.join(ROOT_DIR, 'models'))
         os.environ["CUDA_VISIBLE_DEVICES"] = '0'
-        self.num_outputs = 3 + 4
+        self.num_outputs = (3 + 4)*2
         self.inp_dim = inp_dim
-        self.num_classes = 3
+        self.num_classes = 4
         self.MODEL = importlib.import_module('model_cls_off_rot')
         self.classifier = self.MODEL.get_model(self.num_outputs, self.inp_dim, self.num_classes).cuda()
-        #checkpoint = torch.load('/home/priya/iliad/panda-lang-manip/panda_gym/envs/inference/log_cls_off_rot/part_seg/2023-01-19_15-54/checkpoints/best_model.pth')
-        #checkpoint = torch.load('/home/priya/iliad/panda-lang-manip/panda_gym/envs/inference/log_cls_off_rot/part_seg/2023-01-26_11-50/checkpoints/best_model.pth')
-        #checkpoint = torch.load('/home/priya/iliad/panda-lang-manip/panda_gym/envs/inference/log/part_seg/2023-02-23_22-46/checkpoints/best_model.pth')
-        #checkpoint = torch.load('/home/priya/iliad/panda-lang-manip/panda_gym/envs/inference/log_cabinet_topleft/part_seg/2023-02-24_07-51/checkpoints/best_model.pth')
-        checkpoint = torch.load('%s/%s/checkpoints/best_model.pth'%(ROOT_DIR, checkpoint_path))
+        checkpoint = torch.load('%s/%s/best_model.pth'%(ROOT_DIR, checkpoint_path))
         self.classifier.load_state_dict(checkpoint['model_state_dict'])
         self.classifier = self.classifier.eval()
         
@@ -75,22 +71,29 @@ class Inference:
             offsets = offsets.squeeze().detach().cpu().numpy()
             rots = rots.squeeze().detach().cpu().numpy()
 
-            start_idxs = np.where(cls == 1)
-            end_idxs = np.where(cls == 2)
+            start_idxs = np.where(cls == 1)[0]
+            end_idxs = np.where(cls == 2)[0]
+            both_idxs = np.where(cls == 3)[0]
 
-            start_offsets = offsets[start_idxs]
-            end_offsets = offsets[end_idxs]
+            print(start_idxs.shape, end_idxs.shape, both_idxs.shape)
 
-            start_rots = rots[start_idxs]
+            start_idxs = np.union1d(start_idxs, both_idxs)
+            end_idxs = np.union1d(end_idxs, both_idxs)
+
+            start_offsets = offsets[:,:3][start_idxs]
+            end_offsets = offsets[:,3:][end_idxs]
+
+            start_rots = rots[:,:4][start_idxs]
+            print('start rots')
+            print(start_rots)
             norm_start = 1/np.sqrt(np.sum(start_rots*start_rots, axis=1))
             start_rots_norm = np.transpose(np.transpose(start_rots, (1,0))*norm_start, (1,0))
             start_euler = R.from_quat(start_rots_norm[0]).as_euler('xyz', degrees=True) 
 
-            end_rots = rots[end_idxs]
+            end_rots = rots[:,4:][end_idxs]
             norm_end = 1/np.sqrt(np.sum(end_rots*end_rots, axis=1))
             end_rots_norm = np.transpose(np.transpose(end_rots, (1,0))*norm_end, (1,0))
             end_euler = R.from_quat(end_rots_norm[0]).as_euler('xyz', degrees=True)
-            print(start_euler, end_euler)
 
             start_waypts = points_xyz[start_idxs] - start_offsets
             end_waypts = points_xyz[end_idxs] - end_offsets

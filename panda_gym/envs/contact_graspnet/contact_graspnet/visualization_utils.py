@@ -281,7 +281,7 @@ def get_grasps(grasps, cam_pose, gripper_openings):
 
         roll = np.rad2deg(np.arctan((w2*v1 - w1*v2)/(w1*v1 + w2*v2)))
 
-        print('vecs and roll', parallel_grasp_vec, across_vec, roll)
+        #print('vecs and roll', parallel_grasp_vec, across_vec, roll)
 
         # Get yaw and pitch
         top_offset = np.array([0,-0.0584,0])
@@ -321,14 +321,13 @@ def visualize_grasps(full_pc, pred_grasps_cam, scores, plot_opencv_cam=False, pc
     best_idx = np.argmax(scores)
 
     for i in range(len(centers_k)):
+        grasp_centers.append(centers_k[i])
+        gripper_pts += all_gripper_pts[i]
+        color = cm2(scores[i])[:3]
         if i == best_idx:
-            grasp_centers.append(centers_k[i])
-            gripper_pts += all_gripper_pts[i]
-            color = cm2(scores[i])[:3]
-            #if i == best_idx:
-            #    color = [0, 1.0, 0]
-            grasp_colors.append(color)
-            gripper_colors += [color for _ in range(len(all_gripper_pts[i]))]
+            color = [0, 1.0, 0]
+        grasp_colors.append(color)
+        gripper_colors += [color for _ in range(len(all_gripper_pts[i]))]
 
     rot = R.from_euler('xyz',[200,0,0], degrees=True)
     points = np.vstack((full_pc, gripper_pts))
@@ -341,4 +340,5 @@ def visualize_grasps(full_pc, pred_grasps_cam, scores, plot_opencv_cam=False, pc
     pcd.colors = o3d.utility.Vector3dVector(colors)
     o3d.visualization.draw_geometries([pcd])
 
-    return centers_k[best_idx], rots_k[best_idx], approaches_k[best_idx]
+    #return centers_k[best_idx], rots_k[best_idx], approaches_k[best_idx]
+    return np.array(centers_k), rots_k, np.array(approaches_k), best_idx

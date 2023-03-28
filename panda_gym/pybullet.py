@@ -67,17 +67,15 @@ class PyBullet:
         """
         return self.physics_client.saveState()
 
-    def render(
-        self,
+    def get_cam2world_transforms(
+        self, 
         width: int = 480,
         height: int = 480,
         target_position: Optional[np.ndarray] = np.zeros(3),
         distance: float = 1.4,
         yaw: float = 45,
         pitch: float = -30,
-        roll: float = 0,
-        waypoints=None
-    ) -> Optional[np.ndarray]:
+        roll: float = 0):
 
         target_position = target_position if target_position is not None else np.zeros(3)
 
@@ -102,6 +100,89 @@ class PyBullet:
             fov=60, aspect=float(width) / height, nearVal=0.1, farVal=100.0
         )
 
+        projectionMatrix = np.asarray(proj_matrix).reshape([4,4],order='F')
+        viewMatrix = np.asarray(view_matrix).reshape([4,4],order='F')
+        tran_pix_world = np.linalg.inv(np.matmul(projectionMatrix, viewMatrix))
+
+        return view_matrix, proj_matrix, tran_pix_world
+
+    def deproject(
+        self,
+        depth,
+        pixels,
+        tran_pix_world,
+        width: int = 480,
+        height: int = 480,
+        ):
+
+        #pixels[:, 0] *= np.array([width for _ in range(len(pixels))])
+        #pixels[:, 1] *= np.array([height for _ in range(len(pixels))])
+        #pixels[:, 1] = np.array([height for _ in range(len(pixels))]) - pixels[:, 1]
+
+        x = pixels[:,0] * 1/width
+        x *= 2
+        x -= 1
+
+        y = (np.array([height for _ in range(len(pixels))]) - pixels[:,1]) * 1/height
+        y *= 2
+        y -= 1
+        
+        #z = depth[pixels[:,1], pixels[:,0]]
+        z = 2 * depth[pixels[:,1], pixels[:,0]] - 1
+
+        h = np.ones_like(z)
+
+        pixels = np.stack([x, y, z, h], axis=1)
+
+        # filter out "infinite" depths
+        #idxs = z < 0.99
+        #pixels = pixels[idxs]
+        #pixels[:, 2] = 2 * pixels[:, 2] - 1
+
+        # turn pixels to world coordinates
+        points = np.matmul(tran_pix_world, pixels.T).T
+        points /= points[:, 3: 4]
+        points = points[:, :3]
+
+        return points
+    
+    def render(
+        self,
+        width: int = 480,
+        height: int = 480,
+        target_position: Optional[np.ndarray] = np.zeros(3),
+        distance: float = 1.4,
+        yaw: float = 45,
+        pitch: float = -30,
+        roll: float = 0,
+        waypoints=None
+    ) -> Optional[np.ndarray]:
+
+        target_position = target_position if target_position is not None else np.zeros(3)
+
+        view_matrix, proj_matrix, tran_pix_world = self.get_cam2world_transforms(width, height, target_position, distance, yaw, pitch, roll)
+
+        #if self.connection_mode == p.DIRECT:
+        #    warnings.warn(
+        #        "The use of the render method is not recommended when the environment "
+        #        "has not been created with render=True. The rendering will probably be weird. "
+        #        "Prefer making the environment with option `render=True`. For example: "
+        #        "`env = gym.make('PandaReach-v3', render=True)`.",
+        #        UserWarning,
+        #    )
+        #view_matrix = self.physics_client.computeViewMatrixFromYawPitchRoll(
+        #    cameraTargetPosition=target_position,
+        #    distance=distance,
+        #    yaw=yaw,
+        #    pitch=pitch,
+        #    roll=roll,
+        #    upAxisIndex=2,
+        #)
+
+        #proj_matrix = self.physics_client.computeProjectionMatrixFOV(
+        #    fov=60, aspect=float(width) / height, nearVal=0.1, farVal=100.0
+        #)
+
         (_, _, px, depth, _) = self.physics_client.getCameraImage(
             width=width,
             height=height,
@@ -117,7 +198,7 @@ class PyBullet:
 
         projectionMatrix = np.asarray(proj_matrix).reshape([4,4],order='F')
         viewMatrix = np.asarray(view_matrix).reshape([4,4],order='F')
-        tran_pix_world = np.linalg.inv(np.matmul(projectionMatrix, viewMatrix))
+        #tran_pix_world = np.linalg.inv(np.matmul(projectionMatrix, viewMatrix))
 
         y, x = np.mgrid[-1:1:2 / height, -1:1:2 / width]
         y *= -1.
@@ -165,16 +246,19 @@ class PyBullet:
                 px = [int(x), int(y)]
                 waypoints_proj.append(px)
 
-        #z_low = np.where(points[:,2] > 0.002)
         z_low = np.where(points[:,2] > 0.0)
+        #z_low = np.where(points[:,2] > 0.002)
+        z_high = np.where(points[:,2] < 0.67)
         y_low = np.where(points[:,0] > -0.5)
         y_high= np.where(points[:,0] < 0.2)
+        #y_low = np.where(points[:,0] > -0.65)
+        #y_high= np.where(points[:,0] < 0.65)
 
         idxs_valid = np.intersect1d(z_low, y_high)
+        idxs_valid = np.intersect1d(idxs_valid, z_high)
         idxs_valid = np.intersect1d(idxs_valid, y_low)
         points = points[idxs_valid]
         colors = colors[idxs_valid]
-
         pixels_2d = pixels_2d[idxs_valid]
 
         return rgb, depth, points, colors, pixels_2d, waypoints_proj
