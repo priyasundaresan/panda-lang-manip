@@ -60,14 +60,14 @@ class Manipulate:
         self.graspable_obj_names = []
         self.graspable_objs = []
         for i in range(len(grasping_locs)):
-            fn = random.choice(os.listdir('grasping_assets'))
+            fn = random.choice(os.listdir('semantic_assets'))
             #fn = random.choice(os.listdir('grasp_assets'))
             self.graspable_obj_names.append(fn)
                 
             ori = R.from_euler('xyz', [0,0,np.random.uniform(0,180)], degrees=True).as_quat()
-            obj = self.sim.loadURDF(body_name='body%d'%i, fileName='grasping_assets/%s/model.urdf'%fn, basePosition=grasping_locs[i], baseOrientation=ori, globalScaling=0.85)
-            #obj = self.sim.loadURDF(body_name='body%d'%i, fileName='grasp_assets/%s/model.urdf'%fn, basePosition=grasping_locs[i], baseOrientation=ori, globalScaling=0.85)
-            self.sim.physics_client.changeDynamics(obj, -1, mass=5)
+            #obj = self.sim.loadURDF(body_name='body%d'%i, fileName='grasping_assets/%s/model.urdf'%fn, basePosition=grasping_locs[i], baseOrientation=ori, globalScaling=0.85)
+            obj = self.sim.loadURDF(body_name='body%d'%i, fileName='semantic_assets/%s/model.urdf'%fn, basePosition=grasping_locs[i], baseOrientation=ori, globalScaling=0.875)
+            #self.sim.physics_client.changeDynamics(obj, -1, mass=5)
 
             self.graspable_objs.append('body%d'%i)
             self.body_id_mapping['body%d'%i] = obj
@@ -152,13 +152,17 @@ class Manipulate:
         point = self.sim.deproject(depth, np.array(pixel).reshape(-1,2), cam2world)
         return point
 
-    def execute(self):
+    def execute(self, episode):
+        save_path = 'preds/%05d.jpg'%episode
+
         self.reset_robot()
         img, points, colors, depth, cam2world = self.take_rgbd()
 
         prompt = 'Pick up the %s by the '%(self.graspable_obj_names[0])
-        prompt += input(prompt + '____?')
-        semantic_waypoint_proj = self.kpt_inference_server.run_inference(img, prompt)
+        inp = input(prompt + '____?')
+
+        prompt += inp
+        semantic_waypoint_proj = self.kpt_inference_server.run_inference(img, prompt, save_path=save_path)
     
         semantic_waypoint  = self.deproject(semantic_waypoint_proj, depth, cam2world)[0]
 
@@ -187,8 +191,6 @@ class Manipulate:
         nbrs = NearestNeighbors(n_neighbors=1).fit(grasp_positions)
         dists, idxs  = nbrs.kneighbors(semantic_waypoint.reshape(1,-1), return_distance=True)
         best_idx = idxs[0][0]
-        #print(dists, idxs, best_idx)
-        #print(start_waypoint, grasp_positions)
         
         grasp_pos = grasp_positions[best_idx]
         (yaw,pitch,roll) = angles[best_idx]
@@ -196,7 +198,7 @@ class Manipulate:
 
         offset = approach_pos - grasp_pos
         approach_pos = grasp_pos + 2*offset
-        grasp_pos -= 0.5*offset
+        grasp_pos -= 0.3*offset
 
         lift_pos = grasp_pos + np.array([0,0,0.15])
 
@@ -204,24 +206,68 @@ class Manipulate:
 
         grasp_euler = reset_euler + [yaw,pitch,roll]
 
+        ctr = episode+1
+
+        img, _, _, _, _ = self.take_rgbd()
+        cv2.imwrite('preds/%05d.jpg'%ctr, img)
+        ctr += 1
+
         self.robot.move(approach_pos, grasp_euler)
         for i in range(100):
+            if i % 25 == 0:
+                img, _, _, _, _ = self.take_rgbd()
+                cv2.imwrite('preds/%05d.jpg'%ctr, img)
+                ctr += 1
             self.sim.step()
+
+        img, _, _, _, _ = self.take_rgbd()
+        cv2.imwrite('preds/%05d.jpg'%ctr, img)
+        ctr += 1
 
         self.robot.move(grasp_pos, grasp_euler)
 
         for i in range(100):
+            if i % 25 == 0:
+                img, _, _, _, _ = self.take_rgbd()
+                cv2.imwrite('preds/%05d.jpg'%ctr, img)
+                ctr += 1
             self.sim.step()
+
+        img, _, _, _, _ = self.take_rgbd()
+        cv2.imwrite('preds/%05d.jpg'%ctr, img)
+        ctr += 1
 
         self.robot.grasp()
 
+        img, _, _, _, _ = self.take_rgbd()
+        cv2.imwrite('preds/%05d.jpg'%ctr, img)
+        ctr += 1
+
         for i in range(100):
+            if i % 25 == 0:
+                img, _, _, _, _ = self.take_rgbd()
+                cv2.imwrite('preds/%05d.jpg'%ctr, img)
+                ctr += 1
             self.sim.step()
+
+        img, _, _, _, _ = self.take_rgbd()
+        cv2.imwrite('preds/%05d.jpg'%ctr, img)
+        ctr += 1
 
         self.robot.move(lift_pos, grasp_euler)
 
-        for i in range(200):
+        img, _, _, _, _ = self.take_rgbd()
+        cv2.imwrite('preds/%05d.jpg'%ctr, img)
+        ctr += 1
+
+        for i in range(100):
+            if i % 25 == 0:
+                img, _, _, _, _ = self.take_rgbd()
+                cv2.imwrite('preds/%05d.jpg'%ctr, img)
+                ctr += 1
             self.sim.step()
+
+        return ctr
 
 if __name__ == '__main__':
     if not os.path.exists('images'):
@@ -234,9 +280,7 @@ if __name__ == '__main__':
         os.mkdir('preds')
 
     #task.execute()
+    episode = 0
     for i in range(10):
         task.reset()
-        try:
-            task.execute()
-        except:
-            continue
+        episode = task.execute(episode)

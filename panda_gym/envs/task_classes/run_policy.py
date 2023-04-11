@@ -359,7 +359,7 @@ class TableTop:
     def execute(self, episode_idx, instr, action):
         print('HERE', instr)
         img, pcl_points, pcl_colors, pixels, pcl_kpt_cond = self.take_rgbd(instr)
-        idxs = np.random.choice(len(pcl_points), 10000)
+        idxs = np.random.choice(len(pcl_points), 5000)
         pcl_points = pcl_points[idxs]
         pcl_colors = pcl_colors[idxs]
         pcl_kpt_cond = pcl_kpt_cond[idxs]

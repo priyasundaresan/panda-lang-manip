@@ -36,7 +36,7 @@ class TableTop:
 
     def _create_scene(self) -> None:
         """Create the scene."""
-        num_objs = np.random.randint(3,6)
+        num_objs = np.random.randint(3,5)
 
         self.cabinet_loc, object_locs = self.reset_sim(num_objs)
         self.pour_loc = object_locs[0]
@@ -147,7 +147,8 @@ class TableTop:
 
     def reset_sim(self, num_locs=3):
         cabinet_loc = np.array([np.random.uniform(-0.2,0.05), np.random.uniform(0.45,0.65), 0])
-        filtered_points = self.RandX(num_locs, 0.075)
+        #filtered_points = self.RandX(num_locs, 0.075)
+        filtered_points = self.RandX(num_locs, 0.125)
 
         return cabinet_loc, filtered_points
 
@@ -231,12 +232,6 @@ class TableTop:
         #pixels_start = np.array([waypoints_proj[0]])
         #pixels_end = np.array([waypoints_proj[1]])
 
-        #### Filter infinite depths in points
-        idxs = np.where(points[:,2] < 0.5)[0]
-        points = points[idxs]
-        colors = colors[idxs]
-        pixels_2d = pixels_2d[idxs]
-        ####
 
         points_start = self.sim.deproject(depth, pixels_start, cam2world)
         points_end = self.sim.deproject(depth, pixels_end, cam2world)
@@ -398,6 +393,10 @@ class TableTop:
 
         start_ori = R.from_euler('xyz', grasp_euler, degrees=True).as_quat()  
         end_ori = R.from_euler('xyz', pour_euler, degrees=True).as_quat() 
+
+        print(grasp_euler, alpha, start_ori)
+        print(pour_euler, alpha, end_ori)
+
         orientations = [start_ori, end_ori]
 
         ### Grasp cup
@@ -427,18 +426,27 @@ class TableTop:
         np.save('dset/lang/%05d.npy'%(episode_idx), prompt)
         np.save('dset/primitive_labels/%05d.npy'%(episode_idx), primitive_label)
 
-
         start, end = waypoints
         start_ori, end_ori = orientations
 
         # Subsample points
         #idxs = np.random.choice(len(points), min(5000, len(points)))
+        idxs = np.where(points[:,2] < 0.5)[0]
+        points = points[idxs]
+        colors = colors[idxs]
+        kpt_cond = kpt_cond[idxs]
+
+        idxs = np.where(points[:,1] < 0.45)[0]
+        points = points[idxs]
+        colors = colors[idxs]
+        kpt_cond = kpt_cond[idxs]
+
         idxs = points[:,2] > 0.002
         points = points[idxs]
         colors = colors[idxs]
         kpt_cond = kpt_cond[idxs]
 
-        print(points.shape)
+        print('here', points.shape)
 
         #nbrs = NearestNeighbors(n_neighbors=800, algorithm='ball_tree').fit(points)
         #nbrs = NearestNeighbors(n_neighbors=2000, algorithm='ball_tree').fit(points)
@@ -537,17 +545,17 @@ class TableTop:
         #                         [['Fill up my glass', 'Open a drawer', 'Close the cabinet'], [('pour'), ('open', 'top_right'), ('close', 'top_right')]],
         #                         [['Fill up my glass', 'Open a drawer', 'Close the cabinet'], [('pour'), ('open', 'middle'), ('close', 'middle')]]]*15
 
-        language_to_primitive_map = [
-                                 [['Pour me a glass'], [('pour')]],
-                                 [['Fill up my glass'], [('pour')]],
-                                 [['Fill up the empty cup'], [('pour')]]]
+        #language_to_primitive_map = [
+        #                         [['Pour me a glass'], [('pour')]],
+        #                         [['Fill up my glass'], [('pour')]],
+        #                         [['Fill up the empty cup'], [('pour')]]]
 
-        #language_to_primitive_map = [[['Open the top left cabinet'], [('open', 'top_left')]],
-        #                         [['Open the top right cabinet'], [('open', 'top_right')]],
-        #                         [['Open the middle cabinet'], [('open', 'middle')]],
-        #                         [['Open a drawer', 'Close the cabinet'], [('open', 'top_left'), ('close', 'top_left')]],
-        #                         [['Open a drawer', 'Close the cabinet'], [('open', 'top_right'), ('close', 'top_right')]],
-        #                         [['Open a drawer', 'Close the cabinet'], [('open', 'middle'), ('close', 'middle')]]]
+        language_to_primitive_map = [[['Open the top left cabinet'], [('open', 'top_left')]],
+                                 [['Open the top right cabinet'], [('open', 'top_right')]],
+                                 [['Open the middle cabinet'], [('open', 'middle')]],
+                                 [['Open a drawer', 'Close the cabinet'], [('open', 'top_left'), ('close', 'top_left')]],
+                                 [['Open a drawer', 'Close the cabinet'], [('open', 'top_right'), ('close', 'top_right')]],
+                                 [['Open a drawer', 'Close the cabinet'], [('open', 'middle'), ('close', 'middle')]]]
 
         #language_to_primitive_map = [
         #                         [['Pick up the %s and put it in the %s'], [('pick_place')]],
@@ -580,7 +588,8 @@ if __name__ == '__main__':
 
     episode = 0
 
-    while episode < 50:
+    while episode < 350:
+    #while episode < 70:
         if episode%5 == 0:
             task.sim.close()
             sim = PyBullet(render=True, background_color=np.array([255,255,255]))
