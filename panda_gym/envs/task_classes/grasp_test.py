@@ -49,7 +49,7 @@ class Manipulate:
         success = False
         while not success:
             try:
-                obj = self.sim.loadURDF(body_name='body', fileName='grasping_assets/%s/model.urdf'%fn, basePosition=location, baseOrientation=ori, globalScaling=0.8)
+                obj = self.sim.loadURDF(body_name='body', fileName='grasping_assets/%s/model.urdf'%fn, basePosition=location, baseOrientation=ori, globalScaling=0.95)
                 success = True
                 self.body_id_mapping['body'] = obj
             except:
@@ -106,7 +106,11 @@ class Manipulate:
 
         ctr = 0
 
-        grasp_pos, (yaw,pitch,roll), approach_pos = self.inference_server.run_inference(points, colors)
+        grasp_positions, angles, approaches, best_idx = self.inference_server.run_inference(points, colors)
+        grasp_pos = grasp_positions[best_idx]
+        (yaw,pitch,roll) = angles[best_idx]
+        approach_pos = approaches[best_idx]
+
         #yaw = pitch = 0
         #print('ROLL', roll)
 
