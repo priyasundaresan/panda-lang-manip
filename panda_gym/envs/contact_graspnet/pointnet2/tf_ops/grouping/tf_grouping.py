@@ -7,7 +7,7 @@ except:
 from tensorflow.python.framework import ops
 import sys
 import os
-BASE_DIR = '/home/priya/iliad/panda-lang-manip/panda_gym/envs/contact_graspnet/pointnet2/tf_ops/grouping'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(BASE_DIR)
 grouping_module=tf.load_op_library(os.path.join(BASE_DIR, 'tf_grouping_so.so'))
 def query_ball_point(radius, nsample, xyz1, xyz2):

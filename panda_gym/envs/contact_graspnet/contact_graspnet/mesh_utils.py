@@ -68,8 +68,7 @@ class Object(object):
 class PandaGripper(object):
     """An object representing a Franka Panda gripper."""
 
-    #def __init__(self, q=None, num_contact_points_per_finger=10, root_folder=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))):
-    def __init__(self, q=None, num_contact_points_per_finger=10, root_folder='/home/priya/iliad/panda-lang-manip/panda_gym/envs/contact_graspnet'):
+    def __init__(self, q=None, num_contact_points_per_finger=10, root_folder='/host/panda_gym/envs/contact_graspnet'):
         """Create a Franka Panda parallel-yaw gripper object.
 
         Keyword Arguments:

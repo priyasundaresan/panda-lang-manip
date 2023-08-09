@@ -6,12 +6,12 @@ Date: November 2017
 
 import os
 import sys
-BASE_DIR = '/home/priya/iliad/panda-lang-manip/panda_gym/envs/contact_graspnet/pointnet2'
-sys.path.append(os.path.join(BASE_DIR, 'utils'))
-sys.path.append(os.path.join(BASE_DIR, 'tf_ops/sampling'))
-sys.path.append(os.path.join(BASE_DIR, 'tf_ops/grouping'))
-sys.path.append(os.path.join(BASE_DIR, 'tf_ops/3d_interpolation'))
-
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(BASE_DIR)
+sys.path.append(os.path.join(ROOT_DIR, 'utils'))
+sys.path.append(os.path.join(ROOT_DIR, 'tf_ops/sampling'))
+sys.path.append(os.path.join(ROOT_DIR, 'tf_ops/grouping'))
+sys.path.append(os.path.join(ROOT_DIR, 'tf_ops/3d_interpolation'))
 from tf_sampling import farthest_point_sample, gather_point
 from tf_grouping import query_ball_point, group_point, knn_point
 from tf_interpolate import three_nn, three_interpolate

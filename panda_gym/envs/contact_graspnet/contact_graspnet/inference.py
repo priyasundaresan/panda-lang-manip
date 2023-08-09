@@ -11,9 +11,6 @@ tf.disable_eager_execution()
 physical_devices = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
-#BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-#BASE_DIR = '/home/priya/iliad/panda-lang-manip/panda_gym/envs/contact_graspnet/contact_graspnet'
-#sys.path.append(os.path.join(BASE_DIR))
 
 from panda_gym.envs.contact_graspnet.contact_graspnet import config_utils
 from panda_gym.envs.contact_graspnet.contact_graspnet import data
@@ -96,7 +93,7 @@ def inference(global_config, checkpoint_dir, input_paths, K=None, local_regions=
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--ckpt_dir', default='/home/priya/iliad/panda-lang-manip/panda_gym/envs/contact_graspnet/checkpoints/scene_test_2048_bs3_hor_sigma_001', help='Log dir [default: checkpoints/scene_test_2048_bs3_hor_sigma_001]')
+    parser.add_argument('--ckpt_dir', default='/host/panda_gym/envs/contact_graspnet/checkpoints/scene_test_2048_bs3_hor_sigma_001', help='Log dir [default: checkpoints/scene_test_2048_bs3_hor_sigma_001]')
     parser.add_argument('--np_path', default='test_data/7.npy', help='Input data: npz/npy file with keys either "depth" & camera matrix "K" or just point cloud "pc" in meters. Optionally, a 2D "segmap"')
     parser.add_argument('--png_path', default='', help='Input data: depth map png in meters')
     parser.add_argument('--K', default=None, help='Flat Camera Matrix, pass as "[fx, 0, cx, 0, fy, cy, 0, 0 ,1]"')

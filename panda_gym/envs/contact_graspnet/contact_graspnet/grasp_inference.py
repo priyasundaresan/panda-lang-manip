@@ -23,7 +23,7 @@ from scipy.spatial.transform import Rotation as R
 
 class CGNInference:
     def __init__(self):
-        checkpoint_dir = '/home/priya/iliad/panda-lang-manip/panda_gym/envs/contact_graspnet/checkpoints/scene_test_2048_bs3_hor_sigma_001'
+        checkpoint_dir = '/host/panda_gym/envs/contact_graspnet/checkpoints/scene_test_2048_bs3_hor_sigma_001'
         global_config = config_utils.load_config(checkpoint_dir, batch_size=1, arg_configs=[])
         self.grasp_estimator = GraspEstimator(global_config)
         self.grasp_estimator.build_network()
@@ -60,3 +60,6 @@ class CGNInference:
         grasp_points = rot.inv().as_matrix()@grasp_points.T
         approach_points = rot.inv().as_matrix()@approach_points.T
         return grasp_points.T, grasp_rots, approach_points.T, best_idx
+
+if __name__ == '__main__':
+    inf = CGNInference()

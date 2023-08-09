@@ -8,7 +8,7 @@ import tensorflow.compat.v1 as tf
 tf.disable_eager_execution()
 TF2 = True
 
-BASE_DIR = '/home/priya/iliad/panda-lang-manip/panda_gym/envs/contact_graspnet'
+BASE_DIR = '/host/panda_gym/envs/contact_graspnet'
 sys.path.append(os.path.join(BASE_DIR))
 sys.path.append(os.path.join(BASE_DIR, 'pointnet2',  'utils'))
 sys.path.append(os.path.abspath(__file__))
